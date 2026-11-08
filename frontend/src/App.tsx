@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { ROUTE_PATTERNS, ROUTES } from './constants/routes';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { SkeletonCard } from './components/ui/Skeleton';
 
 // Lazy load components
 const UploadPage = lazy(() => import('./pages/UploadPage'));
@@ -30,10 +31,10 @@ const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPane
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 
-// Loading component
+// Loading component：用统一骨架屏替代各页手搓的旋转圆点
 const Loading = () => (
-  <div className="flex items-center justify-center min-h-[50vh]">
-    <div className="w-10 h-10 border-3 border-slate-200 border-t-primary-500 rounded-full animate-spin" />
+  <div className="mx-auto w-full max-w-2xl p-4">
+    <SkeletonCard lines={4} />
   </div>
 );
 

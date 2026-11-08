@@ -8,6 +8,7 @@ import {ragChatApi, type RagChatSessionListItem} from '../api/ragChat';
 import {formatDateOnly} from '../utils/date';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import CodeBlock from '../components/CodeBlock';
+import { EmptyState } from '../components/ui';
 import {ChevronLeft, ChevronRight, Edit, MessageSquare, Pin, Plus, Trash2,} from 'lucide-react';
 
 interface KnowledgeBaseQueryPageProps {
@@ -414,9 +415,11 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
                   />
                 </div>
               ) : sessions.length === 0 ? (
-                  <div className="text-center py-6 text-slate-400 dark:text-slate-500 text-sm">
-                  暂无对话历史
-                </div>
+                <EmptyState
+                  compact
+                  title="暂无对话历史"
+                  description="选择知识库并开始提问后，对话会显示在这里"
+                />
               ) : (
                 <div className="space-y-2">
                   {sessions.map((session) => (

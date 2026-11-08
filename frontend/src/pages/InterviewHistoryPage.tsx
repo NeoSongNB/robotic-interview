@@ -1,4 +1,5 @@
 import { toast } from '../components/ui/Toast';
+import { Button, Card, EmptyState } from '../components/ui';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
@@ -679,17 +680,18 @@ export default function InterviewHistoryPage({
 
       {/* Empty */}
       {!loading && showOriginalEmpty && (
-        <motion.div
-          className="dark-card text-center py-20"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <Users className="w-16 h-16 text-slate-300 dark:text-slate-500 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无面试记录</h3>
-          <p className="text-slate-500 dark:text-slate-400">
-            {isKnowledgeBaseView ? '开始一次知识库面试后，记录将显示在这里' : '开始一次模拟面试后，记录将显示在这里'}
-          </p>
-        </motion.div>
+        <Card>
+          <EmptyState
+            icon={<Users className="h-8 w-8" />}
+            title="暂无面试记录"
+            description={isKnowledgeBaseView ? '开始一次知识库面试后，记录将显示在这里' : '开始一次模拟面试后，记录将显示在这里'}
+            action={
+              <Button onClick={() => navigate('/interview-hub')}>
+                去面试中心
+              </Button>
+            }
+          />
+        </Card>
       )}
 
       {/* Table */}

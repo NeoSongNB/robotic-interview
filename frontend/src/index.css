@@ -569,4 +569,23 @@ html[data-skin='graphite'] {
   .btn-primary::after {
     display: none;
   }
+  /* 覆盖后续新增的骨架屏脉冲、侧栏抽屉过渡与通用过渡，
+     让开启「减少动态效果」的用户看到的是瞬时状态而非动画 */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 全局键盘焦点环：此前只有皮肤切换器有 focus-visible 样式，
+   按钮 / 链接 / 表单控件在键盘导航时几乎没有可见焦点 */
+@layer base {
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid rgb(var(--skin-accent, 104 85 255));
+    outline-offset: 2px;
+  }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../components/ui';
 import {
   ArrowDownUp,
   BookOpen,
@@ -246,6 +247,11 @@ export default function KnowledgeBaseInterviewLandingPage() {
           <p className="text-sm dark:text-slate-400">
             {keyword.trim() ? '没有匹配的知识库' : '暂无已完成知识库，先上传并等待向量化完成'}
           </p>
+          {!keyword.trim() && (
+            <Button onClick={() => navigate('/knowledgebase/upload')} icon={<Plus className="h-4 w-4" />}>
+              上传知识库
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
