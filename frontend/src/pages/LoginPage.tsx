@@ -56,7 +56,7 @@ export default function LoginPage() {
           <div className="w-14 h-14 neon-icon-box rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary-500/30 mb-4">
             <Sparkles className="w-7 h-7" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">奶娃面试官</h1>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">AI Interview</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">登录以继续你的面试练习</p>
         </div>
 

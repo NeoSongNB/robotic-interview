@@ -110,6 +110,33 @@ class ResumeContentCodecTest {
   }
 
   @Test
+  @DisplayName("识别带分隔符手机号、保留整句技能描述、不把学院名当专业")
+  void extractCommonChineseResumeLayout() {
+      String text = """
+          林思远
+          男 · 1999 年生 · 深圳 | 电话 138-0000-1234 | 邮箱 linsiyuan@example.com | 求职意向：Java 后端开发工程师
+
+          教育背景
+          深圳大学 计算机与软件学院 2018.09 - 2022.06
+          计算机科学与技术 本科 · GPA 3.7/4.0
+
+          专业技能
+          Java 基础扎实，熟悉集合、并发、JVM 内存模型与垃圾回收；熟悉 Spring Boot、Spring Cloud、MyBatis。
+          熟悉 MySQL 索引与事务、Redis 缓存与分布式锁；了解 PostgreSQL 与向量检索。
+          """;
+      ResumeContent content = codec.fromResumeText(text);
+
+      assertThat(content.getBasicInfo().getPhone()).isEqualTo("138-0000-1234");
+      assertThat(content.getBasicInfo().getSchool()).isEqualTo("深圳大学");
+      assertThat(content.getBasicInfo().getMajor()).isEqualTo("计算机科学与技术");
+      assertThat(content.getSkills()).hasSizeLessThan(8);
+      assertThat(content.getSkills())
+          .noneMatch(skill -> skill.equals("并发") || skill.equals("熟悉集合"));
+      assertThat(content.getSkills())
+          .anyMatch(skill -> skill.contains("JVM 内存模型与垃圾回收"));
+  }
+
+  @Test
   @DisplayName("支持技能标题与内容同行，项目要点按列表符号抽取")
   void extractInlineSkillHeadingAndBullets() {
       String text = """

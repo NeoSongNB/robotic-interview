@@ -3,11 +3,12 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Settings, Plus, Trash2, Plug, CheckCircle, XCircle,
-  Loader2, Eye, EyeOff, RefreshCw, Server, Edit2, Mic, Volume2, ChevronDown, Database,
+  Loader2, Eye, EyeOff, RefreshCw, Server, Edit2, Mic, Volume2, Database,
 } from 'lucide-react';
 import { llmProviderApi } from '../api/llmProvider';
 import ConfirmDialog from '../components/ConfirmDialog';
 import MyAiSettings from '../components/MyAiSettings';
+import AnchoredSelect from '../components/AnchoredSelect';
 import { useAuth } from '../contexts/AuthContext';
 import type {
   ProviderItem, CreateProviderRequest, UpdateProviderRequest,
@@ -161,8 +162,6 @@ export default function SettingsPage() {
   const [formSupportsEmbedding, setFormSupportsEmbedding] = useState(false);
   const [formTemperature, setFormTemperature] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [showEmbeddingDropdown, setShowEmbeddingDropdown] = useState(false);
 
   // 当前表单 Provider ID 匹配的预设
   const currentPreset = useMemo(
@@ -198,6 +197,16 @@ export default function SettingsPage() {
   // ASR/TTS form fields
   const [asrForm, setAsrForm] = useState<AsrConfigRequest>({});
   const [ttsForm, setTtsForm] = useState<TtsConfigRequest>({});
+
+  // 弹窗打开期间锁定背景滚动：否则聚焦弹窗内输入框时浏览器会把页面滚到别处，
+  // 造成「弹窗跟着乱飘、背景错位」的观感
+  const anyModalOpen = showModal || showVoiceModal !== null || deleteConfirmId !== null;
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [anyModalOpen]);
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -894,19 +903,21 @@ export default function SettingsPage() {
               onClick={closeModal}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* 弹窗高于视口时用 overlay 自身滚动，避免 flex 居中把顶部推到屏幕外 */}
+            <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto overscroll-contain">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6"
+                className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col
+                  bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-6"
               >
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-5">
+                <h3 className="shrink-0 text-xl font-bold text-slate-900 dark:text-white mb-5">
                   {editingProvider ? '编辑 Provider' : '新增 Provider'}
                 </h3>
 
-                <div className="space-y-4">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
                   {/* Provider ID */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
@@ -992,57 +1003,13 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                       聊天模型 <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={formModel}
-                        onChange={(e) => {
-                          setFormModel(e.target.value);
-                          setShowModelDropdown(false);
-                        }}
-                        onFocus={() => currentPreset && setShowModelDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowModelDropdown(false), 150)}
-                        placeholder={currentPreset ? '从下拉列表选择或输入自定义聊天模型名' : '例如: qwen3.5-flash, deepseek-v4-flash, glm-5'}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600
-                          bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white
-                          placeholder:text-slate-400 focus:outline-none focus:ring-2
-                          focus:ring-primary-500/50 focus:border-primary-400 transition-shadow"
-                      />
-                      {currentPreset && (
-                        <button
-                          type="button"
-                          onClick={() => setShowModelDropdown(!showModelDropdown)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400
-                            hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                      )}
-                      {showModelDropdown && currentPreset && (
-                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-700
-                          border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg
-                          max-h-60 overflow-auto">
-                          {currentPreset.models.map((m) => (
-                            <button
-                              key={m.value}
-                              type="button"
-                              onClick={() => {
-                                setFormModel(m.value);
-                                setShowModelDropdown(false);
-                              }}
-                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-primary-50
-                                dark:hover:bg-slate-600 transition-colors flex justify-between items-center
-                                ${formModel === m.value
-                                  ? 'text-primary-600 dark:text-primary-400 font-medium bg-primary-50 dark:bg-slate-600'
-                                  : 'text-slate-700 dark:text-slate-200'}`}
-                            >
-                              <span className="font-mono">{m.value}</span>
-                              <span className="text-xs text-slate-400 dark:text-slate-500 ml-2 whitespace-nowrap">{m.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <AnchoredSelect
+                      ariaLabel="聊天模型"
+                      value={formModel}
+                      onChange={setFormModel}
+                      options={currentPreset?.models}
+                      placeholder={currentPreset ? '从下拉列表选择或输入自定义聊天模型名' : '例如: qwen3.5-flash, deepseek-v4-flash, glm-5'}
+                    />
                   </div>
 
                   {/* Embedding Model */}
@@ -1067,61 +1034,16 @@ export default function SettingsPage() {
                         支持 Embedding
                       </label>
                     </div>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={formEmbeddingModel}
-                        onChange={(e) => {
-                          setFormEmbeddingModel(e.target.value);
-                          setShowEmbeddingDropdown(false);
-                        }}
-                        onFocus={() => formSupportsEmbedding && currentPreset?.embeddingModels && setShowEmbeddingDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowEmbeddingDropdown(false), 150)}
-                        disabled={!formSupportsEmbedding}
-                        placeholder={formSupportsEmbedding
-                          ? (currentPreset?.embeddingModels ? '从下拉列表选择或输入自定义向量模型名' : '例如: text-embedding-v3, embedding-3')
-                          : 'DeepSeek / Kimi 等 Provider 通常不支持 Embedding'}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600
-                          bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white
-                          placeholder:text-slate-400 focus:outline-none focus:ring-2
-                          focus:ring-primary-500/50 focus:border-primary-400 transition-shadow
-                          disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                      {formSupportsEmbedding && currentPreset?.embeddingModels && (
-                        <button
-                          type="button"
-                          onClick={() => setShowEmbeddingDropdown(!showEmbeddingDropdown)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400
-                            hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                      )}
-                      {formSupportsEmbedding && showEmbeddingDropdown && currentPreset?.embeddingModels && (
-                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-700
-                          border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg
-                          max-h-60 overflow-auto">
-                          {currentPreset.embeddingModels.map((m) => (
-                            <button
-                              key={m.value}
-                              type="button"
-                              onClick={() => {
-                                setFormEmbeddingModel(m.value);
-                                setShowEmbeddingDropdown(false);
-                              }}
-                              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-primary-50
-                                dark:hover:bg-slate-600 transition-colors flex justify-between items-center
-                                ${formEmbeddingModel === m.value
-                                  ? 'text-primary-600 dark:text-primary-400 font-medium bg-primary-50 dark:bg-slate-600'
-                                  : 'text-slate-700 dark:text-slate-200'}`}
-                            >
-                              <span className="font-mono">{m.value}</span>
-                              <span className="text-xs text-slate-400 dark:text-slate-500 ml-2 whitespace-nowrap">{m.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    <AnchoredSelect
+                      ariaLabel="向量模型"
+                      value={formEmbeddingModel}
+                      onChange={setFormEmbeddingModel}
+                      options={formSupportsEmbedding ? currentPreset?.embeddingModels : undefined}
+                      disabled={!formSupportsEmbedding}
+                      placeholder={formSupportsEmbedding
+                        ? (currentPreset?.embeddingModels ? '从下拉列表选择或输入自定义向量模型名' : '例如: text-embedding-v3, embedding-3')
+                        : 'DeepSeek / Kimi 等 Provider 通常不支持 Embedding'}
+                    />
                   </div>
 
                   {formSupportsEmbedding && (
@@ -1162,7 +1084,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Modal actions */}
-                <div className="flex gap-3 justify-end mt-6">
+                <div className="flex shrink-0 gap-3 justify-end mt-6">
                   <motion.button
                     onClick={closeModal}
                     disabled={saving}
@@ -1213,13 +1135,13 @@ export default function SettingsPage() {
               onClick={() => setShowVoiceModal(null)}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto overscroll-contain">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[85vh] overflow-y-auto"
+                className="my-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 max-h-[85dvh] overflow-y-auto"
               >
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-5">
                   {showVoiceModal === 'asr' ? '编辑 ASR 语音识别' : '编辑 TTS 语音合成'}
@@ -1434,13 +1356,13 @@ export default function SettingsPage() {
               onClick={() => setDeleteConfirmId(null)}
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto overscroll-contain">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6"
+                className="my-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6"
               >
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">
                   删除 Provider

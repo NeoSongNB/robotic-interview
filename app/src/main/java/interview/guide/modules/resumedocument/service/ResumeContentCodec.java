@@ -29,7 +29,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ResumeContentCodec {
 
-    private static final Pattern PHONE = Pattern.compile("(?<!\\d)1[3-9]\\d{9}(?!\\d)");
+    /** 支持 13800000000 与 138-0000-1234 / 138 0000 1234 等常见分隔符写法。 */
+    private static final Pattern PHONE = Pattern.compile("(?<!\\d)1[3-9]\\d[\\s-]?\\d{4}[\\s-]?\\d{4}(?!\\d)");
     private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
     private static final Pattern GITHUB = Pattern.compile("https?://(?:www\\.)?github\\.com/[A-Za-z0-9._\\-/]+");
     private static final Pattern URL = Pattern.compile("https?://[^\\s，,；;）)]+");
@@ -289,7 +290,34 @@ public class ResumeContentCodec {
                 break;
             }
         }
+        // 「深圳大学 计算机与软件学院」这种把学院名单独成行的写法，解析不出真实专业；
+        // 再从「计算机科学与技术 本科 · GPA…」这类学位行里补一次
+        if (!items.isEmpty() && items.get(0).getMajor().isBlank()) {
+            String fallback = findMajorFromDegreeLine(sections.get(Section.EDUCATION));
+            if (!fallback.isEmpty()) {
+                items.get(0).setMajor(clip(fallback, ResumeDocumentLimits.MAX_SHORT_TEXT));
+            }
+        }
         return items;
+    }
+
+    /** 从「<专业> 本科 / 硕士 …」的学位行里取专业名。 */
+    private String findMajorFromDegreeLine(List<String> lines) {
+        for (String line : lines) {
+            Matcher degree = DEGREE.matcher(line);
+            if (!degree.find()) {
+                continue;
+            }
+            String head = line.substring(0, degree.start())
+                .replaceAll("^.*?(?:大学|学院)\\s*", "")
+                .replaceAll("^[\\s·|丨,，、:：]+|[\\s·|丨,，、:：]+$", "")
+                .trim();
+            if (head.length() >= 2 && head.length() <= 20
+                && head.matches("[\\u4e00-\\u9fa5A-Za-z（）() ]+")) {
+                return head;
+            }
+        }
+        return "";
     }
 
     /** “大连理工大学 计算机科学与技术 本科 2019-09 至 2023-06” 拆为学校/专业/学位/起止时间。 */
@@ -340,6 +368,10 @@ public class ResumeContentCodec {
             return "";
         }
         String major = token.replaceFirst("^专业[:：]?", "").replaceAll("专业$", "").trim();
+        // 「计算机与软件学院」是学院名，不是专业；留空后由学位行兜底补全
+        if (major.matches(".*(?:大学|学院|学校|University|College).*")) {
+            return "";
+        }
         return major.length() >= 2 && !major.matches(".*\\d.*") ? major : "";
     }
 
@@ -488,12 +520,31 @@ public class ResumeContentCodec {
     }
 
     private void collectSkills(String line, List<String> skills) {
-        for (String part : line.split("[、,，;；|/]+")) {
-            String skill = clip(part.trim(), ResumeDocumentLimits.MAX_SHORT_TEXT);
-            if (skill.length() >= 2 && skill.length() <= 40
-                && skills.size() < ResumeDocumentLimits.MAX_SKILLS) {
-                skills.add(skill);
+        String cleaned = BULLET.matcher(line).replaceFirst("").trim();
+        if (cleaned.isEmpty()) {
+            return;
+        }
+        // 短行且是纯枚举时按顿号/逗号拆成多条；成句的技能描述（含分号、句号或较长）
+        // 必须整句保留，否则「熟悉集合、并发、JVM 内存模型」会被切成三个没意义的碎片
+        boolean enumeration = cleaned.length() <= 40
+            && !cleaned.matches(".*[。；;！!]$")
+            && !cleaned.contains("；") && !cleaned.contains(";");
+        if (enumeration) {
+            for (String part : cleaned.split("[、,，|/]+")) {
+                addSkill(part, skills);
             }
+        } else {
+            for (String sentence : cleaned.split("[。；;]+")) {
+                addSkill(sentence, skills);
+            }
+        }
+    }
+
+    private void addSkill(String raw, List<String> skills) {
+        String skill = clip(raw.replaceAll("^[\\s·•\\-、,，:：]+|[\\s、,，。；;:：]+$", ""),
+            ResumeDocumentLimits.MAX_SHORT_TEXT);
+        if (skill.length() >= 2 && skills.size() < ResumeDocumentLimits.MAX_SKILLS) {
+            skills.add(skill);
         }
     }
 

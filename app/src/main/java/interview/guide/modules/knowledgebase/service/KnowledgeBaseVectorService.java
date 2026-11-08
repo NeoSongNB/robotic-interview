@@ -242,8 +242,10 @@ public class KnowledgeBaseVectorService {
             log.error("向量化知识库失败: kbId={}, jobId={}, error={}",
                 knowledgeBaseId, jobId, ErrorLogSanitizer.summarize(e),
                 ErrorLogSanitizer.forLogging(e));
+            // 保留 cause（只保留类型，不回显 message）：异步消费者据此把 401 / 限流等
+            // 真实原因写成可读提示，避免用户只看到「failed after retry 3」
             throw new BusinessException(ErrorCode.KNOWLEDGE_BASE_VECTORIZATION_FAILED,
-                "向量化知识库失败");
+                "向量化知识库失败", e);
         }
     }
 

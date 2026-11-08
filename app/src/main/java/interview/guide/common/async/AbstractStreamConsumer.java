@@ -136,7 +136,7 @@ public abstract class AbstractStreamConsumer<T> {
                 retryMessage(payload, retryCount + 1);
             } else {
                 markFailed(payload, truncateError(
-                    taskDisplayName() + " failed after retry " + retryCount
+                    taskDisplayName() + " failed after retry " + retryCount + "；" + failureReason(e)
                 ));
             }
             ackMessage(messageId);
@@ -159,6 +159,39 @@ public abstract class AbstractStreamConsumer<T> {
             return null;
         }
         return error.length() > 500 ? error.substring(0, 500) : error;
+    }
+
+    /**
+     * 把异常类型映射成固定、可执行的中文提示。
+     *
+     * <p>只读取异常类名，绝不回显 message / cause 文本：上游 SDK 可能把 API Key、
+     * Prompt 或文档片段塞进异常消息。这样既保留脱敏约束，又让用户能看懂
+     * 「为什么向量化失败」，而不是只看到一句 failed after retry 3。</p>
+     */
+    protected String failureReason(Throwable error) {
+        Throwable cursor = error;
+        for (int depth = 0; cursor != null && depth < 8; depth++, cursor = cursor.getCause()) {
+            String type = cursor.getClass().getSimpleName();
+            if (type.contains("Unauthorized") || type.contains("Authentication")) {
+                return "供应商认证失败（401）：API Key 无效或已过期，请在「我的 AI 设置」中更新";
+            }
+            if (type.contains("PermissionDenied") || type.contains("Forbidden")) {
+                return "供应商拒绝访问（403）：请检查模型权限或账户额度";
+            }
+            if (type.contains("RateLimit") || type.contains("TooManyRequests")) {
+                return "供应商限流：请稍后重试";
+            }
+            if (type.contains("BadRequest") || type.contains("InvalidRequest")) {
+                return "供应商请求参数错误：请检查模型名与向量维度配置";
+            }
+            if (type.contains("NotFound")) {
+                return "供应商模型或接口不存在：请检查 Base URL 与模型名";
+            }
+            if (type.contains("Connect") || type.contains("Timeout") || type.contains("UnknownHost")) {
+                return "无法连接供应商：请检查 Base URL 与网络连通性";
+            }
+        }
+        return "未知错误（" + ErrorLogSanitizer.summarize(error) + "）";
     }
 
     private void ackMessage(StreamMessageId messageId) {
