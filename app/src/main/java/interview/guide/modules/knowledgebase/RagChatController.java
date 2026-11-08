@@ -7,8 +7,10 @@ import interview.guide.modules.knowledgebase.model.RagChatDTO.SessionDTO;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.SessionDetailDTO;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.SessionListItemDTO;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.UpdateKnowledgeBasesRequest;
+import interview.guide.modules.knowledgebase.model.QuerySource;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.UpdateTitleRequest;
 import interview.guide.modules.knowledgebase.service.RagChatSessionService;
+import interview.guide.modules.knowledgebase.service.RagQueryExecution;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * RAG 聊天控制器
@@ -36,6 +39,9 @@ import java.util.List;
 public class RagChatController {
 
     private final RagChatSessionService sessionService;
+
+    /** 流式回答末尾的引用来源哨兵；前端识别后从答案文本里剥离，只作结构化展示。 */
+    public static final String SOURCES_PREFIX = "@@SOURCES@@";
 
     /**
      * 创建新会话
@@ -123,15 +129,32 @@ public class RagChatController {
         // 1. 准备消息（保存用户消息，创建 AI 消息占位）
         Long messageId = sessionService.prepareStreamMessage(sessionId, request.question());
 
-        // 2. 获取流式响应
+        // 2. 获取流式响应；执行轨迹用于在流末尾回传本次引用来源
         StringBuilder fullContent = new StringBuilder();
+        AtomicReference<RagQueryExecution> execution = new AtomicReference<>();
 
-        return sessionService.getStreamAnswer(sessionId, request.question())
+        return sessionService.getStreamAnswer(sessionId, request.question(), execution::set)
             .doOnNext(fullContent::append)
             // 使用 ServerSentEvent 包装，转义换行符避免破坏 SSE 格式
             .map(chunk -> ServerSentEvent.<String>builder()
                 .data(chunk.replace("\n", "\\n").replace("\r", "\\r"))
                 .build())
+            .concatWith(Flux.defer(() -> {
+                List<QuerySource> sources;
+                try {
+                    sources = sessionService.buildSources(sessionId, execution.get());
+                } catch (Exception e) {
+                    log.warn("构造引用来源失败: sessionId={}, error={}", sessionId, e.getMessage());
+                    return Flux.empty();
+                }
+                // 未检索到片段时不追加事件，保持原有纯文本 SSE 事件序列不变
+                if (sources.isEmpty()) {
+                    return Flux.empty();
+                }
+                return Flux.just(ServerSentEvent.<String>builder()
+                    .data(SOURCES_PREFIX + toSourcesJson(sources))
+                    .build());
+            }))
             .doOnComplete(() -> {
                 // 3. 流式完成后更新消息内容
                 sessionService.completeStreamMessage(sessionId, messageId, fullContent.toString());
@@ -153,5 +176,38 @@ public class RagChatController {
                 sessionService.completeStreamMessage(sessionId, messageId, content);
                 log.error("RAG 聊天流式错误: sessionId={}", sessionId, e);
             });
+    }
+
+    /**
+     * 手工序列化引用来源，避免为 Controller 引入额外构造依赖。
+     * 所有字符串字段已在服务端压平换行并在此转义，保证是单行合法 JSON。
+     */
+    private static String toSourcesJson(List<QuerySource> sources) {
+        StringBuilder builder = new StringBuilder("[");
+        for (int i = 0; i < sources.size(); i++) {
+            if (i > 0) builder.append(',');
+            QuerySource source = sources.get(i);
+            builder.append("{\"index\":").append(source.index())
+                .append(",\"knowledgeBaseId\":").append(nullableNumber(source.knowledgeBaseId()))
+                .append(",\"knowledgeBaseName\":").append(jsonText(source.knowledgeBaseName()))
+                .append(",\"filename\":").append(jsonText(source.filename()))
+                .append(",\"chunkIndex\":").append(nullableNumber(source.chunkIndex()))
+                .append(",\"score\":").append(nullableNumber(source.score()))
+                .append(",\"excerpt\":").append(jsonText(source.excerpt()))
+                .append(",\"storageUrl\":").append(jsonText(source.storageUrl()))
+                .append('}');
+        }
+        return builder.append(']').toString();
+    }
+
+    private static String nullableNumber(Number value) {
+        return value == null ? "null" : value.toString();
+    }
+
+    private static String jsonText(String value) {
+        if (value == null) return "null";
+        String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
+            .replace("\r", " ").replace("\n", " ").replace("\t", " ");
+        return "\"" + escaped + "\"";
     }
 }

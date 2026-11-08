@@ -3,6 +3,8 @@ package interview.guide.modules.knowledgebase;
 import interview.guide.common.annotation.RateLimit;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.result.Result;
+import interview.guide.modules.knowledgebase.model.BatchIdsRequest;
+import interview.guide.modules.knowledgebase.model.CategoryMutationRequest;
 import interview.guide.modules.knowledgebase.model.KnowledgeBaseListItemDTO;
 import interview.guide.modules.knowledgebase.model.KnowledgeBaseStatsDTO;
 import interview.guide.modules.knowledgebase.model.QueryRequest;
@@ -90,6 +92,17 @@ public class KnowledgeBaseController {
     }
 
     /**
+     * 批量删除知识库：一次请求内逐条走完整清理链路，避免前端循环调用触发限流。
+     */
+    @PostMapping("/api/knowledgebase/batch-delete")
+    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 3)
+    @RateLimit(dimension = RateLimit.Dimension.IP, count = 3)
+    public Result<Map<String, Object>> batchDeleteKnowledgeBases(
+            @Valid @RequestBody BatchIdsRequest request) {
+        return Result.success(deleteService.deleteKnowledgeBases(request.ids()));
+    }
+
+    /**
      * 基于知识库回答问题（支持多知识库）
      */
     @PostMapping("/api/knowledgebase/query")
@@ -145,6 +158,18 @@ public class KnowledgeBaseController {
     public Result<Void> updateCategory(@PathVariable Long id, @RequestBody Map<String, String> body) {
         listService.updateCategory(id, body.get("category"));
         return Result.success(null);
+    }
+
+    /** 重命名分类（作用于当前用户名下该分类的全部知识库）。 */
+    @PostMapping("/api/knowledgebase/categories/rename")
+    public Result<Integer> renameCategory(@Valid @RequestBody CategoryMutationRequest request) {
+        return Result.success(listService.renameCategory(request.from(), request.to()));
+    }
+
+    /** 删除分类（把该分类下的知识库置为未分类，不删文件）。 */
+    @PostMapping("/api/knowledgebase/categories/remove")
+    public Result<Integer> removeCategory(@Valid @RequestBody CategoryMutationRequest request) {
+        return Result.success(listService.removeCategory(request.category()));
     }
 
     // ========== 上传下载 API ==========

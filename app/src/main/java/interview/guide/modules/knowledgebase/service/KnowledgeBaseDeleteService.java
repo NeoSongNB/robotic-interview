@@ -13,7 +13,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 知识库删除服务
@@ -50,6 +53,34 @@ public class KnowledgeBaseDeleteService {
         }
 
         log.info("知识库已删除: id={}", id);
+    }
+
+    /**
+     * 批量删除：一次 HTTP 请求内完成，避免前端循环调用撞上 2~10 次/秒的限流。
+     * 每条仍走 deleteKnowledgeBase 的完整归属校验与清理链路；单条失败不影响其它条目。
+     */
+    public Map<String, Object> deleteKnowledgeBases(List<Long> ids) {
+        List<Long> safeIds = ids == null ? List.of() : ids;
+        int deleted = 0;
+        List<Long> failed = new ArrayList<>();
+        for (Long id : safeIds) {
+            if (id == null) {
+                continue;
+            }
+            try {
+                deleteKnowledgeBase(id);
+                deleted++;
+            } catch (Exception e) {
+                failed.add(id);
+                log.warn("批量删除中的单条失败: kbId={}, error={}", id,
+                    interview.guide.common.log.ErrorLogSanitizer.summarize(e));
+            }
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("deleted", deleted);
+        result.put("failed", failed.size());
+        result.put("failedIds", failed);
+        return result;
     }
 
     private String deleteKnowledgeBaseRecords(Long id) {

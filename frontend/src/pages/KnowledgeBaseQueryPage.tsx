@@ -3,7 +3,7 @@ import {AnimatePresence, motion} from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
-import {knowledgeBaseApi, type KnowledgeBaseItem, type SortOption} from '../api/knowledgebase';
+import {knowledgeBaseApi, SOURCES_PREFIX, type KnowledgeBaseItem, type QuerySource, type SortOption} from '../api/knowledgebase';
 import {ragChatApi, type RagChatSessionListItem} from '../api/ragChat';
 import {formatDateOnly} from '../utils/date';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -21,6 +21,7 @@ interface Message {
   type: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  sources?: QuerySource[];
 }
 
 interface CategoryGroup {
@@ -291,7 +292,7 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
     setMessages(prev => [...prev, assistantMessage]);
 
     let fullContent = '';
-    const updateAssistantMessage = (content: string) => {
+    const updateAssistantMessage = (content: string, sources?: QuerySource[]) => {
       setMessages(prev => {
         const newMessages = [...prev];
         const lastIndex = newMessages.length - 1;
@@ -299,6 +300,7 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
           newMessages[lastIndex] = {
             ...newMessages[lastIndex],
             content: content,
+            ...(sources ? { sources } : {}),
           };
         }
         return newMessages;
@@ -310,6 +312,16 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
         sessionId,
         userQuestion,
         (chunk: string) => {
+          // 流末尾的引用来源哨兵不属于答案正文，单独解析成结构化引用
+          if (chunk.startsWith(SOURCES_PREFIX)) {
+            try {
+              const parsed = JSON.parse(chunk.slice(SOURCES_PREFIX.length)) as QuerySource[];
+              updateAssistantMessage(fullContent, parsed);
+            } catch {
+              updateAssistantMessage(fullContent, []);
+            }
+            return;
+          }
           fullContent += chunk;
           if (rafRef.current) {
             cancelAnimationFrame(rafRef.current);
@@ -574,6 +586,38 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
                                   </ReactMarkdown>
                                   {loading && index === messages.length - 1 && (
                                     <span className="inline-block w-0.5 h-5 bg-primary-500 ml-1 animate-pulse" />
+                                  )}
+                                  {msg.sources && msg.sources.length > 0 && (
+                                    <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-600">
+                                      <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                        引用来源（点击打开原文件）
+                                      </p>
+                                      <div className="space-y-1.5">
+                                        {msg.sources.map(source => (
+                                          <button
+                                            key={source.index}
+                                            type="button"
+                                            aria-label={`打开引用 S${source.index} 原文件`}
+                                            onClick={() => source.storageUrl
+                                              && window.open(source.storageUrl, '_blank', 'noopener,noreferrer')}
+                                            disabled={!source.storageUrl}
+                                            title={source.storageUrl ? '打开原文件' : '原文件不可用'}
+                                            className="flex w-full items-start gap-2 rounded-lg bg-slate-50 px-2 py-1.5 text-left text-xs transition-colors hover:bg-primary-50 disabled:cursor-default dark:bg-slate-700/50 dark:hover:bg-slate-700"
+                                          >
+                                            <span className="shrink-0 rounded bg-primary-100 px-1 font-mono text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
+                                              S{source.index}
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                              <span className="block truncate font-medium text-slate-700 dark:text-slate-200">
+                                                {source.knowledgeBaseName || source.filename || '知识库片段'}
+                                                {source.chunkIndex !== null && ` · 第 ${source.chunkIndex + 1} 片`}
+                                              </span>
+                                              <span className="block truncate text-slate-400">{source.excerpt}</span>
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
                               )}

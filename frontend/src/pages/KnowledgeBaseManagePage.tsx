@@ -1,4 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import { Button } from '../components/ui';
+import { toast } from '../components/ui/Toast';
 import {AnimatePresence, motion} from 'framer-motion';
 import {
   AlertCircle,
@@ -125,6 +127,12 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
   const [categories, setCategories] = useState<string[]>([]);
   const [deleteItem, setDeleteItem] = useState<KnowledgeBaseItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [renameFrom, setRenameFrom] = useState('');
+  const [renameTo, setRenameTo] = useState('');
+  const [categoryBusy, setCategoryBusy] = useState(false);
 
   // 分类编辑状态
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
@@ -222,6 +230,51 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
       console.error('删除失败:', error);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // 批量删除：一次请求完成，避免逐条删除撞上 2~10 次/秒限流
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0 || batchDeleting) return;
+    setBatchDeleting(true);
+    try {
+      const result = await knowledgeBaseApi.batchDeleteKnowledgeBases(Array.from(selectedIds));
+      toast('success', `已删除 ${result.deleted} 个知识库${result.failed > 0 ? `，${result.failed} 个失败` : ''}`);
+      setSelectedIds(new Set());
+      await loadData();
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '批量删除失败，请稍后重试');
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const handleRenameCategory = async () => {
+    if (!renameFrom.trim() || !renameTo.trim() || categoryBusy) return;
+    setCategoryBusy(true);
+    try {
+      const affected = await knowledgeBaseApi.renameCategory(renameFrom.trim(), renameTo.trim());
+      toast('success', `分类已重命名，影响 ${affected} 个知识库`);
+      setRenameFrom(''); setRenameTo('');
+      await loadData();
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '重命名分类失败');
+    } finally {
+      setCategoryBusy(false);
+    }
+  };
+
+  const handleRemoveCategory = async (category: string) => {
+    if (categoryBusy) return;
+    setCategoryBusy(true);
+    try {
+      const affected = await knowledgeBaseApi.removeCategory(category);
+      toast('success', `已移除分类，${affected} 个知识库变为未分类`);
+      await loadData();
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '移除分类失败');
+    } finally {
+      setCategoryBusy(false);
     }
   };
 
@@ -348,6 +401,27 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
         <div
             className="dark-card p-4 mb-6">
         <div className="flex flex-wrap items-center gap-4">
+          {/* 批量操作 / 分类管理入口 */}
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={selectedIds.size === 0 || batchDeleting}
+              loading={batchDeleting}
+              onClick={handleBatchDelete}
+            >
+              删除选中{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCategoryManagerOpen(open => !open)}
+              aria-expanded={categoryManagerOpen}
+            >
+              分类管理
+            </Button>
+          </div>
+
           {/* 搜索框 */}
           <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
             <div className="relative">
@@ -427,6 +501,52 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
         </div>
+
+        {categoryManagerOpen && (
+          <div className="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+            <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">分类维护</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={renameFrom}
+                onChange={event => setRenameFrom(event.target.value)}
+                placeholder="原分类"
+                aria-label="原分类"
+                list="category-manage-suggestions"
+                className="dark-input w-32 rounded-lg px-2 py-1.5 text-xs"
+              />
+              <input
+                value={renameTo}
+                onChange={event => setRenameTo(event.target.value)}
+                placeholder="新分类"
+                aria-label="新分类"
+                className="dark-input w-32 rounded-lg px-2 py-1.5 text-xs"
+              />
+              <datalist id="category-manage-suggestions">
+                {categories.map(cat => <option key={cat} value={cat} />)}
+              </datalist>
+              <Button size="sm" disabled={categoryBusy || !renameFrom.trim() || !renameTo.trim()}
+                onClick={handleRenameCategory}>
+                重命名
+              </Button>
+            </div>
+            {categories.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    disabled={categoryBusy}
+                    onClick={() => handleRemoveCategory(cat)}
+                    title={`移除分类「${cat}」，其下知识库变为未分类`}
+                    className="rounded-full border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-red-300 hover:text-red-500 disabled:opacity-50 dark:border-slate-600"
+                  >
+                    {cat} ×
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 知识库列表 */}
@@ -455,6 +575,16 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
           <table className="w-full">
               <thead className="bg-slate-50 dark:bg-[rgb(var(--skin-surface-deep)/0.7)] border-b border-slate-100 dark:border-[rgb(var(--skin-accent)/0.14)]">
               <tr>
+                  <th className="w-10 px-3 py-4">
+                    <input
+                      type="checkbox"
+                      aria-label="全选知识库"
+                      checked={knowledgeBases.length > 0 && selectedIds.size === knowledgeBases.length}
+                      onChange={event => setSelectedIds(event.target.checked
+                        ? new Set(knowledgeBases.map(kb => kb.id)) : new Set())}
+                      className="h-4 w-4 accent-primary-500"
+                    />
+                  </th>
                   <th className="text-left px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-300">
                   名称
                 </th>
@@ -487,6 +617,19 @@ export default function KnowledgeBaseManagePage({ onUpload, onChat }: KnowledgeB
                   transition={{ delay: index * 0.05 }}
                   className="border-b border-slate-50 dark:border-[rgb(var(--skin-accent)/0.1)] hover:bg-slate-50 dark:hover:bg-[rgb(var(--skin-surface-hi)/0.45)] dark:hover:shadow-[inset_0_0_32px_-16px_rgb(var(--skin-accent)/0.45)] transition-all duration-300"
                 >
+                  <td className="px-3 py-4">
+                    <input
+                      type="checkbox"
+                      aria-label={`选择 ${kb.name}`}
+                      checked={selectedIds.has(kb.id)}
+                      onChange={event => setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (event.target.checked) next.add(kb.id); else next.delete(kb.id);
+                        return next;
+                      })}
+                      className="h-4 w-4 accent-primary-500"
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <FileText className="w-5 h-5 text-slate-400 dark:text-neon-purple dark:drop-shadow-[0_0_6px_rgb(var(--skin-accent-4)/0.6)]" />

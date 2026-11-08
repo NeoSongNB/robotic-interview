@@ -268,9 +268,28 @@ async function readStream(response: Response, options: StreamSseOptions): Promis
   }
 }
 
+/** 读取后端写入的 CSRF Cookie，供原生 fetch 的 SSE POST 回写同名请求头。 */
+function readXsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const matched = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
+  return matched ? decodeURIComponent(matched[1]) : null;
+}
+
 export async function streamSse(options: StreamSseOptions): Promise<void> {
   try {
-    const response = await fetch(toApiUrl(options.url), options.init);
+    // axios 封装会自动带凭据与 X-XSRF-TOKEN；原生 fetch 不会，
+    // 这里补齐，否则所有 SSE POST（RAG 问答等）会被 CSRF 保护拦成 403。
+    const headers = new Headers(options.init?.headers);
+    const xsrfToken = readXsrfToken();
+    if (xsrfToken && !headers.has('X-XSRF-TOKEN')) {
+      headers.set('X-XSRF-TOKEN', xsrfToken);
+    }
+    const init: RequestInit = {
+      ...options.init,
+      headers,
+      credentials: options.init?.credentials ?? 'include',
+    };
+    const response = await fetch(toApiUrl(options.url), init);
     await assertStreamResponse(response);
     await readStream(response, options);
     options.onComplete();

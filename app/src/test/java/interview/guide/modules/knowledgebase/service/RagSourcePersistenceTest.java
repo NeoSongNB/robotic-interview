@@ -1,6 +1,7 @@
 package interview.guide.modules.knowledgebase.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -53,7 +54,7 @@ class RagSourcePersistenceTest {
     when(kbMapper.toListItemDTOList(List.of())).thenReturn(List.of());
     String footer = RagSources.footer(List.of(new Document("正文", Map.of("source_name", "手册", "kb_id", "9"))));
     doReturn(2L).when(service).prepareStreamMessage(1L, "问题");
-    doReturn(Flux.just("回答", footer)).when(service).getStreamAnswer(1L, "问题");
+    doReturn(Flux.just("回答", footer)).when(service).getStreamAnswer(eq(1L), eq("问题"), any());
 
     var events = new RagChatController(service).sendMessageStream(1L, new SendMessageRequest("问题"))
         .collectList().block();

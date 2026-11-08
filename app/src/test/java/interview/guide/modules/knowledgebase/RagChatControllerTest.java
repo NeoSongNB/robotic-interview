@@ -15,6 +15,8 @@ import reactor.core.publisher.Flux;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +35,7 @@ class RagChatControllerTest {
   void shouldPersistPartialAnswerWhenClientCancels() {
     when(sessionService.prepareStreamMessage(1L, "什么是 RAG"))
         .thenReturn(10L);
-    when(sessionService.getStreamAnswer(1L, "什么是 RAG"))
+    when(sessionService.getStreamAnswer(eq(1L), eq("什么是 RAG"), any()))
         .thenReturn(Flux.concat(Flux.just("部分回答"), Flux.never()));
 
     Flux<ServerSentEvent<String>> response = controller.sendMessageStream(
@@ -54,7 +56,7 @@ class RagChatControllerTest {
   void shouldCompletePlaceholderWhenClientCancelsBeforeFirstChunk() {
     when(sessionService.prepareStreamMessage(2L, "解释向量检索"))
         .thenReturn(20L);
-    when(sessionService.getStreamAnswer(2L, "解释向量检索"))
+    when(sessionService.getStreamAnswer(eq(2L), eq("解释向量检索"), any()))
         .thenReturn(Flux.never());
 
     Flux<ServerSentEvent<String>> response = controller.sendMessageStream(

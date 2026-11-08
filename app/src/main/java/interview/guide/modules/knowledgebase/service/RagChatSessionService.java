@@ -7,6 +7,7 @@ import interview.guide.infrastructure.mapper.KnowledgeBaseMapper;
 import interview.guide.infrastructure.mapper.RagChatMapper;
 import interview.guide.modules.knowledgebase.model.KnowledgeBaseEntity;
 import interview.guide.modules.knowledgebase.model.KnowledgeBaseListItemDTO;
+import interview.guide.modules.knowledgebase.model.QuerySource;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.CreateSessionRequest;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.SessionDTO;
 import interview.guide.modules.knowledgebase.model.RagChatDTO.SessionDetailDTO;
@@ -195,6 +196,12 @@ public class RagChatSessionService {
      * 获取流式回答（带多轮上下文）
      */
     public Flux<String> getStreamAnswer(Long sessionId, String question) {
+        return getStreamAnswer(sessionId, question, null);
+    }
+
+    /** 带执行轨迹的流式问答；轨迹用于在流末尾回传本次引用来源。 */
+    public Flux<String> getStreamAnswer(Long sessionId, String question,
+                                        java.util.function.Consumer<RagQueryExecution> trace) {
         // SSE 订阅前校验会话归属
         RagChatSessionEntity session = requireOwnedSessionWithKnowledgeBases(sessionId);
 
@@ -203,7 +210,23 @@ public class RagChatSessionService {
             ? loadHistoryMessages(sessionId) : List.of();
 
         log.info("加载历史上下文: sessionId={}, historySize={}", sessionId, history.size());
-        return queryService.answerQuestionStream(kbIds, question, history);
+        return queryService.answerQuestionStream(kbIds, question, history, trace);
+    }
+
+    /** 会话关联的知识库 id（已做归属校验），供 Controller 构造引用来源。 */
+    public List<Long> getKnowledgeBaseIds(Long sessionId) {
+        return requireOwnedSessionWithKnowledgeBases(sessionId).getKnowledgeBaseIds();
+    }
+
+    /**
+     * 把本次流式问答的执行轨迹转成引用来源。
+     * 没有检索片段时返回空列表，调用方据此不发额外 SSE 事件，保持原有事件序列。
+     */
+    public List<QuerySource> buildSources(Long sessionId, RagQueryExecution execution) {
+        if (execution == null || execution.retrievedDocs() == null || execution.retrievedDocs().isEmpty()) {
+            return List.of();
+        }
+        return queryService.buildSources(execution, getKnowledgeBaseIds(sessionId));
     }
 
     /**

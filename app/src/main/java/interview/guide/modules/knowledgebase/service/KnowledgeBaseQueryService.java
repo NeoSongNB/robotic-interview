@@ -9,8 +9,10 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.security.CurrentUserProvider;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.usercredential.service.UserCredentialService;
+import interview.guide.modules.knowledgebase.model.KnowledgeBaseEntity;
 import interview.guide.modules.knowledgebase.model.QueryRequest;
 import interview.guide.modules.knowledgebase.model.QueryResponse;
+import interview.guide.modules.knowledgebase.model.QuerySource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -34,6 +36,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * 知识库查询服务
@@ -160,6 +164,15 @@ public class KnowledgeBaseQueryService {
      * @return AI回答
      */
     public String answerQuestion(List<Long> knowledgeBaseIds, String question) {
+        return answerQuestion(knowledgeBaseIds, question, null);
+    }
+
+    /**
+     * 同步问答，可选地把本次执行轨迹交给调用方。
+     * trace 为 null 时行为与原入口完全一致；查询接口用它构造可跳转的引用来源。
+     */
+    public String answerQuestion(List<Long> knowledgeBaseIds, String question,
+                                 Consumer<RagQueryExecution> trace) {
         assertKnowledgeBasesOwned(knowledgeBaseIds);
         Long userId = currentUserProvider.requireUserId();
         // 用户级模型上下文：Chat（生成/改写）与 Embedding（检索）都必须来自当前用户凭证
@@ -192,6 +205,8 @@ public class KnowledgeBaseQueryService {
                     queryContext.rewriteDurationMs() * 1_000_000L);
                 ragMetrics.recordStageDuration("retrieve", "reject", retrievalNanos);
                 ragMetrics.recordStageDuration("total", "reject", System.nanoTime() - totalStart);
+                emitTrace(trace, normalized, queryContext, List.of(), List.of(),
+                    retrievalNanos / 1_000_000L, 0, NO_RESULT_RESPONSE, "NO_RESULT");
                 return NO_RESULT_RESPONSE;
             }
 
@@ -221,7 +236,11 @@ public class KnowledgeBaseQueryService {
                 System.nanoTime() - totalStart);
 
             log.info("知识库问答完成: kbIds={}", knowledgeBaseIds);
-            return rejected ? answer : answer + RagSources.footer(relevantDocs);
+            String finalAnswer = rejected ? answer : answer + RagSources.footer(relevantDocs);
+            emitTrace(trace, normalized, queryContext, List.of(), relevantDocs,
+                retrievalNanos / 1_000_000L, generationNanos / 1_000_000L,
+                finalAnswer, rejected ? "NO_RESULT" : "OK");
+            return finalAnswer;
 
         } catch (Exception e) {
             log.error("知识库问答失败: {}", ErrorLogSanitizer.summarize(e),
@@ -260,7 +279,8 @@ public class KnowledgeBaseQueryService {
      * 查询知识库并返回完整响应
      */
     public QueryResponse queryKnowledgeBase(QueryRequest request) {
-        String answer = answerQuestion(request.knowledgeBaseIds(), request.question());
+        AtomicReference<RagQueryExecution> execution = new AtomicReference<>();
+        String answer = answerQuestion(request.knowledgeBaseIds(), request.question(), execution::set);
 
         // 获取知识库名称（多个知识库用逗号分隔）
         List<String> kbNames = listService.getKnowledgeBaseNames(request.knowledgeBaseIds());
@@ -269,7 +289,67 @@ public class KnowledgeBaseQueryService {
         // 使用第一个知识库ID作为主要标识（兼容前端）
         Long primaryKbId = request.knowledgeBaseIds().getFirst();
 
-        return new QueryResponse(answer, primaryKbId, kbNamesStr);
+        return new QueryResponse(answer, primaryKbId, kbNamesStr,
+            buildSources(execution.get(), request.knowledgeBaseIds()));
+    }
+
+    /**
+     * 把本次参与生成的检索片段转成可跳转的引用。
+     * 只用请求里已通过归属校验的 kbId 去查实体，metadata 里的 kb_id 仅作匹配键，
+     * 绝不据此查询其它用户的文件，避免越权读取。
+     */
+    public List<QuerySource> buildSources(RagQueryExecution execution, List<Long> requestedIds) {
+        if (execution == null || execution.retrievedDocs() == null || execution.retrievedDocs().isEmpty()) {
+            return List.of();
+        }
+        Map<Long, KnowledgeBaseEntity> owned = new HashMap<>();
+        if (requestedIds != null) {
+            for (Long id : requestedIds) {
+                if (id != null) {
+                    listService.getKnowledgeBaseEntity(id).ifPresent(entity -> owned.put(id, entity));
+                }
+            }
+        }
+        List<QuerySource> sources = new ArrayList<>();
+        for (RagQueryExecution.RetrievedDoc doc : execution.retrievedDocs()) {
+            Map<String, Object> meta = doc.metadata() == null ? Map.of() : doc.metadata();
+            Long kbId = toLong(meta.get("kb_id"));
+            KnowledgeBaseEntity entity = kbId == null ? null : owned.get(kbId);
+            // SSE 单行 data 不能带真实换行，片段摘要统一压成单行
+            String text = doc.text() == null ? "" : doc.text().replaceAll("[\\r\\n]+", " ");
+            sources.add(new QuerySource(
+                doc.rank(),
+                kbId,
+                entity != null ? entity.getName() : toText(meta.get("source_name")),
+                entity != null ? entity.getOriginalFilename() : toText(meta.get("source_filename")),
+                toInteger(meta.get("chunk_index")),
+                doc.score(),
+                text.length() > 240 ? text.substring(0, 240) + "…" : text,
+                entity != null ? entity.getStorageUrl() : null));
+        }
+        return List.copyOf(sources);
+    }
+
+    private static String toText(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private static Long toLong(Object value) {
+        if (value == null) return null;
+        try {
+            return Long.valueOf(value.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Integer toInteger(Object value) {
+        if (value == null) return null;
+        try {
+            return Integer.valueOf(value.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

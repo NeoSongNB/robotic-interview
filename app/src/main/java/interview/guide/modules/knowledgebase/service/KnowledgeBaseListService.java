@@ -154,6 +154,41 @@ public class KnowledgeBaseListService {
         log.info("更新知识库分类: id={}, category={}", id, category);
     }
 
+    /** 重命名分类：只影响当前用户名下该分类的知识库，返回受影响的条数。 */
+    @Transactional
+    public int renameCategory(String from, String to) {
+        if (from == null || from.isBlank() || to == null || to.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "原分类与新分类都不能为空");
+        }
+        if (from.equals(to)) {
+            return 0;
+        }
+        List<KnowledgeBaseEntity> entities = knowledgeBaseRepository
+            .findByUserIdAndCategoryOrderByUploadedAtDesc(currentUserProvider.requireUserId(), from);
+        for (KnowledgeBaseEntity entity : entities) {
+            entity.setCategory(to);
+        }
+        knowledgeBaseRepository.saveAll(entities);
+        log.info("分类已重命名: from={}, to={}, affected={}", from, to, entities.size());
+        return entities.size();
+    }
+
+    /** 删除分类：把该分类下的知识库置为未分类，不删除文件本身。 */
+    @Transactional
+    public int removeCategory(String category) {
+        if (category == null || category.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "分类名不能为空");
+        }
+        List<KnowledgeBaseEntity> entities = knowledgeBaseRepository
+            .findByUserIdAndCategoryOrderByUploadedAtDesc(currentUserProvider.requireUserId(), category);
+        for (KnowledgeBaseEntity entity : entities) {
+            entity.setCategory(null);
+        }
+        knowledgeBaseRepository.saveAll(entities);
+        log.info("分类已移除: category={}, affected={}", category, entities.size());
+        return entities.size();
+    }
+
     // ========== 搜索功能 ==========
 
     /**

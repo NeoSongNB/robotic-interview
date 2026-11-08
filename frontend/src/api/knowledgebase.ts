@@ -58,11 +58,27 @@ export interface QueryRequest {
   question: string;
 }
 
+export interface QuerySource {
+  index: number;
+  knowledgeBaseId: number | null;
+  knowledgeBaseName: string;
+  filename: string;
+  chunkIndex: number | null;
+  score: number | null;
+  excerpt: string;
+  storageUrl: string | null;
+}
+
 export interface QueryResponse {
   answer: string;
   knowledgeBaseId: number;
   knowledgeBaseName: string;
+  /** 同步 query 端点返回；流式端点通过末尾哨兵事件单独下发 */
+  sources?: QuerySource[];
 }
+
+/** 流式回答末尾的引用来源哨兵，需与后端 RagChatController.SOURCES_PREFIX 一致。 */
+export const SOURCES_PREFIX = '@@SOURCES@@';
 
 export type KnowledgeBaseQuestionStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED' | 'STALE';
 
@@ -232,6 +248,25 @@ export const knowledgeBaseApi = {
    */
   async deleteKnowledgeBase(id: number): Promise<void> {
     return request.delete(`/api/knowledgebase/${id}`);
+  },
+
+  /** 批量删除：一次请求完成，避免前端循环调用撞限流 */
+  async batchDeleteKnowledgeBases(ids: number[]): Promise<{
+    deleted: number; failed: number; failedIds: number[];
+  }> {
+    return request.post('/api/knowledgebase/batch-delete', { ids });
+  },
+
+  /** 分类重命名，返回受影响的知识库数量 */
+  async renameCategory(from: string, to: string): Promise<number> {
+    return request.post<number>('/api/knowledgebase/categories/rename',
+      { from, to, category: '' });
+  },
+
+  /** 移除分类（知识库变为未分类，不删文件） */
+  async removeCategory(category: string): Promise<number> {
+    return request.post<number>('/api/knowledgebase/categories/remove',
+      { from: '', to: '', category });
   },
 
   // ========== 分类管理 ==========
