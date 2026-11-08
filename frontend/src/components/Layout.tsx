@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {BookOpen, ChevronRight, Database, FileStack, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
+import {BookOpen, ChevronRight, Database, FileStack, LogOut, Menu, MessageSquare, Moon, Settings, Sparkles, Sun, Users, X,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -29,6 +29,8 @@ export default function Layout() {
   const navigate = useNavigate();
   const {user, logout} = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+  // 窄屏下侧栏默认收起；lg 及以上由 CSS 强制展开，不受此状态影响
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [interviewModalPreset, setInterviewModalPreset] = useState<{
     defaultMode: 'text' | 'voice';
     defaultResumeId?: number;
@@ -148,8 +150,18 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
-      {/* 左侧边栏：深蓝半透明玻璃质感 */}
-      <aside className="w-64 bg-white/90 dark:bg-[var(--skin-navy)]/80 backdrop-blur-2xl border-r border-slate-100 dark:border-[rgb(var(--skin-accent)/0.14)] fixed h-screen left-0 top-0 z-50 flex flex-col dark:shadow-[8px_0_40px_-16px_rgb(var(--skin-shadow)/0.9)]">
+      {/* 窄屏遮罩：点击关闭抽屉；lg 及以上不需要 */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="关闭导航"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      )}
+
+      {/* 左侧边栏：深蓝半透明玻璃质感。lg 以下为可折叠抽屉，lg 以上固定常驻 */}
+      <aside className={`w-64 bg-white/90 dark:bg-[var(--skin-navy)]/80 backdrop-blur-2xl border-r border-slate-100 dark:border-[rgb(var(--skin-accent)/0.14)] fixed h-screen left-0 top-0 z-50 flex flex-col transition-transform duration-300 ease-neon dark:shadow-[8px_0_40px_-16px_rgb(var(--skin-shadow)/0.9)] ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         {/* Logo */}
         <div className="p-6 border-b border-slate-100 dark:border-[rgb(var(--skin-accent)/0.12)] flex items-center justify-between">
           <Link to="/history" className="flex items-center gap-3 group">
@@ -161,6 +173,14 @@ export default function Layout() {
               <span className="text-xs text-slate-400 dark:text-slate-500">智能面试助手</span>
             </div>
           </Link>
+          <button
+            type="button"
+            aria-label="收起导航"
+            onClick={() => setSidebarOpen(false)}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {/* 外观：页面风格 + 明暗模式 */}
@@ -185,7 +205,7 @@ export default function Layout() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 p-4 overflow-y-auto">
+        <nav className="flex-1 p-4 overflow-y-auto" onClick={() => setSidebarOpen(false)}>
           <div className="space-y-6">
             {navGroups.map((group) => (
               <div key={group.id}>
@@ -267,8 +287,22 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* 主内容区 */}
-      <main className="flex-1 ml-64 p-10 min-h-screen overflow-y-auto">
+      {/* 主内容区：窄屏不预留 256px 侧栏宽度，padding 随断点收缩 */}
+      <main className="min-w-0 flex-1 ml-0 p-4 sm:p-6 lg:ml-64 lg:p-10 min-h-screen overflow-y-auto">
+        {/* 窄屏顶部工具条：lg 以上完全隐藏 */}
+        <div className="mb-4 flex items-center gap-3 lg:hidden">
+          <button
+            type="button"
+            aria-label="展开导航"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+            className="btn-secondary inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
+          >
+            {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            菜单
+          </button>
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">AI Interview</span>
+        </div>
         <motion.div
           key={currentPath}
           initial={{ opacity: 0, y: 20 }}
