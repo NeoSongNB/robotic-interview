@@ -1,3 +1,5 @@
+import { toast } from './ui/Toast';
+import { PANEL_CHART_COLORS } from '../constants/visualTokens';
 import {useMemo, useState} from 'react';
 import {motion} from 'framer-motion';
 import {CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts';
@@ -48,7 +50,7 @@ export default function InterviewPanel({
       onDeleteInterview(sessionId);
       setDeleteConfirm(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '删除失败，请稍后重试');
     } finally {
       setDeletingSessionId(null);
     }
@@ -107,23 +109,23 @@ export default function InterviewPanel({
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" className="dark:stroke-slate-700"/>
+                <CartesianGrid strokeDasharray="3 3" stroke={PANEL_CHART_COLORS.grid} className="dark:stroke-slate-700"/>
                 <XAxis
                     dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
+                  tick={{ fill: PANEL_CHART_COLORS.tick, fontSize: 12 }}
                 />
                 <YAxis
                   domain={[0, 100]}
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 12 }}
+                  tick={{ fill: PANEL_CHART_COLORS.tick, fontSize: 12 }}
                 />
                 <Tooltip
                     contentStyle={{
-                      backgroundColor: '#fff',
-                    border: '1px solid #e2e8f0',
+                      backgroundColor: PANEL_CHART_COLORS.tooltipBg,
+                    border: `1px solid ${PANEL_CHART_COLORS.tooltipBorder}`,
                     borderRadius: '12px',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                   }}

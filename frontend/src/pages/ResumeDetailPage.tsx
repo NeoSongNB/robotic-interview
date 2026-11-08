@@ -1,3 +1,4 @@
+import { toast } from '../components/ui/Toast';
 import {useCallback, useEffect, useState} from 'react';
 import {useLocation} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
@@ -122,7 +123,7 @@ export default function ResumeDetailPage({ resumeId, onBack, onStartInterview }:
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('导出失败，请重试');
+      toast('error', '导出失败，请重试');
     } finally {
       setExporting(null);
     }
@@ -141,7 +142,7 @@ export default function ResumeDetailPage({ resumeId, onBack, onStartInterview }:
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('导出失败，请重试');
+      toast('error', '导出失败，请重试');
     } finally {
       setExporting(null);
     }
@@ -154,7 +155,7 @@ export default function ResumeDetailPage({ resumeId, onBack, onStartInterview }:
       setSelectedInterview(detail);
       setDetailView('interviewDetail');
     } catch (err) {
-      alert('加载面试详情失败');
+      toast('error', '加载面试详情失败');
     } finally {
       setLoadingInterview(false);
     }

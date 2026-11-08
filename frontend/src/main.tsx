@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastViewport } from './components/ui/Toast'
 import { SKIN_STORAGE_KEY } from './constants/themeSkin'
 import { normalizeSkinId } from './utils/themeSkin'
 import './index.css'
@@ -28,6 +30,9 @@ import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+    <ToastViewport />
   </React.StrictMode>,
 )

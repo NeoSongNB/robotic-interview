@@ -1,6 +1,7 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 @plugin "@tailwindcss/typography";
+
+/* 字体全部走系统栈：原来远程加载 Outfit / DM Sans，网络不可达时会回退并造成首屏排版跳动。 */
 
 /* 启用深色模式 - 使用 class 策略 */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -35,6 +36,10 @@
   --color-glow-warning: #ffaa32;
   --color-glow-error: #ff5577;
 
+  /* 原先散落在组件里的任意值色值，统一收编为 token */
+  --color-code-bg: #282c34;
+  --color-section-label: #5f6f9e;
+
   /* slate 色阶向深海蓝偏移（700+ 基本只用于暗色场景） */
   --color-slate-300: #a8b6de;
   --color-slate-400: #8fa0cc;
@@ -49,8 +54,8 @@
   --ease-neon: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.34, 1.4, 0.64, 1);
 
-  --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
-  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 /* ============================================================

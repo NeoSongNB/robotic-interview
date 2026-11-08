@@ -1,3 +1,4 @@
+import { toast } from './ui/Toast';
 import {useCallback, useEffect, useState} from 'react';
 import {AnimatePresence, motion} from 'framer-motion';
 import {AnalyzeStatus, historyApi, ResumeListItem, ResumeStats} from '../api/history';
@@ -216,7 +217,7 @@ export default function HistoryList({ onSelectResume }: HistoryListProps) {
       await loadResumes();
       setDeleteItem(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '删除失败，请稍后重试');
     } finally {
       setDeletingId(null);
     }

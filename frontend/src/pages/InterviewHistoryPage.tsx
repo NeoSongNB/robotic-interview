@@ -1,3 +1,4 @@
+import { toast } from '../components/ui/Toast';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
@@ -389,7 +390,7 @@ export default function InterviewHistoryPage({
       await loadAll();
       setDeleteItem(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '删除失败，请稍后重试');
     } finally {
       setDeletingSessionId(null);
     }
@@ -409,7 +410,7 @@ export default function InterviewHistoryPage({
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('导出失败，请重试');
+      toast('error', '导出失败，请重试');
     } finally {
       setExporting(null);
     }
@@ -427,7 +428,7 @@ export default function InterviewHistoryPage({
       await voiceInterviewApi.generateEvaluation(item.voiceSessionId);
       await loadAll(true);
     } catch {
-      alert('重新生成评估失败，请稍后再试');
+      toast('error', '重新生成评估失败，请稍后再试');
     } finally {
       setRetryingVoiceSessionId(null);
     }

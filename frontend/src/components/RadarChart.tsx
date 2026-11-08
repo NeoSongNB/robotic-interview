@@ -9,6 +9,7 @@ import {
     Tooltip
 } from 'recharts';
 import {normalizeScore} from '../utils/score';
+import {RADAR_COLORS} from '../constants/visualTokens';
 
 interface RadarChartProps {
   data: Array<{
@@ -51,10 +52,11 @@ export default function RadarChart({ data, height = 320, className = '' }: Radar
     // 检测是否为深色模式
     const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark');
 
-    const gridColor = isDark ? '#334155' : '#e2e8f0';
-    const tickColor = isDark ? '#94a3b8' : '#64748b';
-    const tooltipBg = isDark ? '#1e293b' : '#fff';
-    const tooltipBorder = isDark ? '#334155' : '#e2e8f0';
+    const palette = isDark ? RADAR_COLORS.dark : RADAR_COLORS.light;
+    const gridColor = palette.grid;
+    const tickColor = palette.tick;
+    const tooltipBg = palette.tooltipBg;
+    const tooltipBorder = palette.tooltipBorder;
 
   return (
     <div className={className} style={{ height }}>

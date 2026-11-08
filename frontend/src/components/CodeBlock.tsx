@@ -55,7 +55,7 @@ export default function CodeBlock({ language, children }: CodeBlockProps) {
       </div>
 
       {/* 代码内容 */}
-      <div className="bg-[#282c34] rounded-b-xl text-sm leading-6">
+      <div className="bg-code-bg rounded-b-xl text-sm leading-6">
         <Suspense fallback={
           <div className="p-4 text-slate-400 font-mono text-xs">Loading code...</div>
         }>

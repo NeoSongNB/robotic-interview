@@ -190,7 +190,7 @@ export default function Layout() {
             {navGroups.map((group) => (
               <div key={group.id}>
                 <div className="px-3 mb-2">
-                  <span className="text-xs font-semibold text-slate-400 dark:text-[#5f6f9e] uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-slate-400 dark:text-section-label uppercase tracking-wider">
                     {group.title}
                   </span>
                 </div>

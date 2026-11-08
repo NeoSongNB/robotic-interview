@@ -1,3 +1,4 @@
+import { toast } from '../components/ui/Toast';
 import {useCallback, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
@@ -126,7 +127,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
       const document = await resumeDocumentApi.createBlank();
       navigate(ROUTES.resumeStudio(document.id));
     } catch (err) {
-      alert(err instanceof Error ? err.message : '新建简历失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '新建简历失败，请稍后重试');
     } finally {
       setCreatingBlank(false);
     }
@@ -144,7 +145,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
       setDocumentBySource(prev => new Map(prev).set(resumeId, document.id));
       navigate(ROUTES.resumeStudio(document.id));
     } catch (err) {
-      alert(err instanceof Error ? err.message : '打开编辑工作台失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '打开编辑工作台失败，请稍后重试');
     } finally {
       setManagingId(null);
     }
@@ -171,7 +172,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
       await loadResumes();
       setDeleteConfirm(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '删除失败，请稍后重试');
     } finally {
       setDeletingId(null);
     }
@@ -186,7 +187,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
       setDocumentDeleteConfirm(null);
       await loadDocuments();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除在线简历失败，请稍后重试');
+      toast('error', err instanceof Error ? err.message : '删除在线简历失败，请稍后重试');
     } finally {
       setDeletingDocumentId(null);
     }
