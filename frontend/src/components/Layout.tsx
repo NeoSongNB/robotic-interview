@@ -5,6 +5,7 @@ import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
 import ThemeSkinSwitcher from './ThemeSkinSwitcher';
+import { GlobalSearch } from './GlobalSearch';
 import {ROUTES} from '../constants/routes';
 import {useAuth} from '../contexts/AuthContext';
 
@@ -181,6 +182,11 @@ export default function Layout() {
           >
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* 全局搜索入口（Ctrl/Cmd + K 也可唤起） */}
+        <div className="px-4 pb-2 pt-4">
+          <GlobalSearch />
         </div>
 
         {/* 外观：页面风格 + 明暗模式 */}

@@ -4,11 +4,15 @@ import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
 import {
   AlertCircle,
+  Braces,
   CheckCircle,
   Clock,
+  Copy,
+  Download,
   FilePlus2,
   FileStack,
   FileText,
+  PenLine,
   PencilLine,
   Printer,
   RefreshCw,
@@ -16,6 +20,13 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { Button } from '../components/ui';
+import {
+  resumeToMarkdown,
+  resumeToJson,
+  safeFileStem,
+  downloadTextFile,
+} from '../utils/resumeExport';
 import {historyApi, ResumeListItem} from '../api/history';
 import {resumeDocumentApi} from '../api/resumeDocument';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -73,6 +84,9 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
   const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
   const [documentDeleteConfirm, setDocumentDeleteConfirm] =
     useState<{ id: number; title: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ResumeDocument | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [busyDocumentId, setBusyDocumentId] = useState<number | null>(null);
 
   const loadResumes = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
@@ -190,6 +204,71 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
       toast('error', err instanceof Error ? err.message : '删除在线简历失败，请稍后重试');
     } finally {
       setDeletingDocumentId(null);
+    }
+  };
+
+  // 在线简历的重命名 / 复制 / 导出都复用现有 list-get-update-create 接口，不新增后端端点
+  const handleRenameOpen = (doc: ResumeDocument) => {
+    setRenameTarget(doc);
+    setRenameValue(doc.title);
+  };
+
+  const handleRenameConfirm = async () => {
+    if (!renameTarget || !renameValue.trim()) return;
+    setBusyDocumentId(renameTarget.id);
+    try {
+      const full = await resumeDocumentApi.get(renameTarget.id);
+      await resumeDocumentApi.update(renameTarget.id, {
+        title: renameValue.trim(),
+        templateCode: full.templateCode,
+        content: full.content,
+        version: full.version,
+      });
+      toast('success', '重命名成功');
+      setRenameTarget(null);
+      await loadDocuments();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '重命名失败，请稍后重试');
+    } finally {
+      setBusyDocumentId(null);
+    }
+  };
+
+  const handleDuplicateDocument = async (doc: ResumeDocument) => {
+    setBusyDocumentId(doc.id);
+    try {
+      const full = await resumeDocumentApi.get(doc.id);
+      const title = `${doc.title || '未命名简历'} 副本`;
+      const created = await resumeDocumentApi.createBlank(title);
+      await resumeDocumentApi.update(created.id, {
+        title,
+        templateCode: full.templateCode,
+        content: full.content,
+        version: created.version,
+      });
+      toast('success', '已创建副本');
+      await loadDocuments();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '复制失败，请稍后重试');
+    } finally {
+      setBusyDocumentId(null);
+    }
+  };
+
+  const handleExportDocument = async (doc: ResumeDocument, format: 'md' | 'json') => {
+    try {
+      const full = await resumeDocumentApi.get(doc.id);
+      const text = format === 'md'
+        ? resumeToMarkdown(full.title, full.content)
+        : resumeToJson(full.title, full.content);
+      downloadTextFile(
+        `${safeFileStem(full.title)}.${format}`,
+        text,
+        format === 'md' ? 'text/markdown;charset=utf-8' : 'application/json;charset=utf-8',
+      );
+      toast('success', format === 'md' ? 'Markdown 已导出' : 'JSON 已导出');
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : '导出失败，请稍后重试');
     }
   };
 
@@ -346,6 +425,44 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
                     title="导出 PDF"
                   >
                     <Printer className="w-4 h-4"/>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRenameOpen(document)}
+                    disabled={busyDocumentId === document.id}
+                    className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-500/15 rounded-lg transition-colors disabled:opacity-50"
+                    title="重命名"
+                    aria-label="重命名在线简历"
+                  >
+                    <PenLine className="w-4 h-4"/>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateDocument(document)}
+                    disabled={busyDocumentId === document.id}
+                    className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 rounded-lg transition-colors disabled:opacity-50"
+                    title="创建副本"
+                    aria-label="创建在线简历副本"
+                  >
+                    <Copy className="w-4 h-4"/>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportDocument(document, 'md')}
+                    className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/15 rounded-lg transition-colors"
+                    title="导出 Markdown"
+                    aria-label="导出 Markdown"
+                  >
+                    <Download className="w-4 h-4"/>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportDocument(document, 'json')}
+                    className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/15 rounded-lg transition-colors"
+                    title="导出 JSON"
+                    aria-label="导出 JSON"
+                  >
+                    <Braces className="w-4 h-4"/>
                   </button>
                   <button
                     type="button"
@@ -570,6 +687,40 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
           ) : undefined
         }
       />
+
+      {/* 在线简历重命名 */}
+      {renameTarget && (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setRenameTarget(null)}
+        >
+          <div
+            role="dialog"
+            aria-label="重命名在线简历"
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-[rgb(var(--skin-accent)/0.25)] dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="mb-3 text-base font-semibold text-slate-800 dark:text-white">重命名在线简历</h3>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') void handleRenameConfirm(); }}
+              className="dark-input w-full rounded-xl px-3 py-2 text-sm"
+              placeholder="输入新名称"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setRenameTarget(null)}>取消</Button>
+              <Button
+                onClick={handleRenameConfirm}
+                disabled={!renameValue.trim() || busyDocumentId !== null}
+              >
+                保存
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

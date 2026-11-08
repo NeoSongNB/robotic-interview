@@ -70,6 +70,7 @@ jobs:
           pnpm run test:interview-entry
           pnpm run test:batch-upload
           pnpm run test:voice-url
+          pnpm run test:resume-export
 
       - name: Build frontend
         run: pnpm run build
