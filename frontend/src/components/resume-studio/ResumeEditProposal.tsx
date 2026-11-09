@@ -18,6 +18,11 @@ export default function ResumeEditProposal({
 }: ResumeEditProposalProps) {
   const needsClarification = proposal.needsClarification;
   const deleting = hasDeleteOperation(proposal);
+  // 删除、合并或调整展示优先级都涉及原文取舍，必须让用户核对原文与理由后再保存。
+  const needsReview = proposal.operations.some(operation =>
+    operation.op === 'DELETE' || operation.op === 'REORDER'
+    || (operation.op === 'UPDATE'
+      && (operation.target === 'INTERNSHIP_HIGHLIGHT' || operation.target === 'HIGHLIGHT')));
 
   return (
     <div className="rounded-xl border border-primary-500/35 bg-white/90 dark:bg-[rgb(var(--skin-surface-deep)/0.7)] p-4 shadow-lg dark:shadow-[0_0_28px_-14px_rgb(var(--skin-accent)/0.8)]">
@@ -71,10 +76,17 @@ export default function ResumeEditProposal({
             </details>
           )}
 
-          {deleting && (
-            <div className="flex items-start gap-2 mb-3 rounded-lg bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+          {needsReview && (
+            <div className={`flex items-start gap-2 mb-3 rounded-lg px-3 py-2 text-xs ${
+              deleting
+                ? 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300'
+                : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300'
+            }`}>
               <CircleAlert className="w-4 h-4 flex-none mt-0.5"/>
-              <span>本次提案包含删除操作，请在上方「本次修改」中确认待删除内容后再保存。</span>
+              <span>
+                本次提案涉及删除、合并或调整展示优先级，请在上方「本次修改」中核对涉及的原文与理由后再保存；
+                每条重点经历应能回答：你具体做了什么、为什么这么做、怎么证明有效。
+              </span>
             </div>
           )}
 

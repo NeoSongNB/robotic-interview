@@ -32,7 +32,8 @@ public class ResumeProposalApplier {
 
     private static final Set<String> OPS = Set.of("ADD", "UPDATE", "DELETE", "REORDER");
     private static final Set<String> TARGETS = Set.of(
-        "BASIC_INFO", "EDUCATION", "PROJECT", "HIGHLIGHT", "SKILL");
+        "BASIC_INFO", "EDUCATION", "PROJECT", "HIGHLIGHT", "SKILL",
+        "INTERNSHIP", "INTERNSHIP_HIGHLIGHT");
     private static final Set<String> BASIC_INFO_FIELDS = Set.of(
         "name", "phone", "email", "school", "major", "degree",
         "targetPosition", "githubUrl", "blogUrl");
@@ -41,6 +42,8 @@ public class ResumeProposalApplier {
     private static final Set<String> PROJECT_FIELDS = Set.of(
         "name", "url", "summary", "techStack", "startDate", "endDate");
     private static final Set<String> HIGHLIGHT_FIELDS = Set.of("content", "sortOrder");
+    private static final Set<String> INTERNSHIP_FIELDS = Set.of(
+        "company", "position", "startDate", "endDate", "description");
     private static final int MAX_SUMMARY_ITEMS = 20;
     private static final int MAX_SUMMARY_LENGTH = 300;
 
@@ -82,8 +85,10 @@ public class ResumeProposalApplier {
         Set<String> knownIds = collectIds(reference);
         Set<String> aliases = new HashSet<>();
         for (ResumeEditOperationDTO operation : operations) {
-            if ("ADD".equals(upper(operation.op())) && "PROJECT".equals(upper(operation.target()))
-                && operation.id() != null && !operation.id().isBlank()) {
+            boolean addRecord = "ADD".equals(upper(operation.op()))
+                && ("PROJECT".equals(upper(operation.target()))
+                    || "INTERNSHIP".equals(upper(operation.target())));
+            if (addRecord && operation.id() != null && !operation.id().isBlank()) {
                 aliases.add(operation.id());
             }
         }
@@ -158,14 +163,14 @@ public class ResumeProposalApplier {
         }
 
         if ("ADD".equals(op)) {
-            if ("HIGHLIGHT".equals(target)) {
+            if ("HIGHLIGHT".equals(target) || "INTERNSHIP_HIGHLIGHT".equals(target)) {
                 String parentId = operation.parentId();
                 if (parentId == null || parentId.isBlank()
                     || (!knownIds.contains(parentId) && !aliases.contains(parentId))) {
-                    throw invalid("新增技术亮点缺少有效的所属项目");
+                    throw invalid("新增亮点缺少有效的所属项目或实习");
                 }
                 if (isBlank(operation.value()) && isBlank(highlightContent(operation))) {
-                    throw invalid("新增技术亮点内容为空");
+                    throw invalid("新增亮点内容为空");
                 }
             } else {
                 if ("EDUCATION".equals(target) && operation.education() == null) {
@@ -174,24 +179,27 @@ public class ResumeProposalApplier {
                 if ("PROJECT".equals(target) && operation.project() == null) {
                     throw invalid("新增项目缺少内容");
                 }
+                if ("INTERNSHIP".equals(target) && operation.internship() == null) {
+                    throw invalid("新增实习经历缺少内容");
+                }
             }
             return;
         }
 
         if ("REORDER".equals(op)) {
-            if (!"HIGHLIGHT".equals(target)) {
-                throw invalid("只有技术亮点与技能支持调整顺序");
+            if (!"HIGHLIGHT".equals(target) && !"INTERNSHIP_HIGHLIGHT".equals(target)) {
+                throw invalid("只有项目亮点、实习成果与技能支持调整顺序");
             }
             String parentId = operation.parentId();
-            ResumeContent.ProjectItem project = findProject(reference, parentId);
-            if (project == null && !aliases.contains(parentId)) {
-                throw invalid("调整顺序缺少有效的所属项目");
+            List<ResumeContent.HighlightItem> highlights = findHighlightList(reference, parentId);
+            if (highlights == null && !aliases.contains(parentId)) {
+                throw invalid("调整顺序缺少有效的所属项目或实习");
             }
             if (values == null || values.isEmpty()) {
                 throw invalid("调整顺序缺少新的顺序");
             }
-            if (project != null && !isPermutation(values,
-                project.getHighlights().stream().map(ResumeContent.HighlightItem::getId).toList())) {
+            if (highlights != null && !isPermutation(values,
+                highlights.stream().map(ResumeContent.HighlightItem::getId).toList())) {
                 throw invalid("亮点顺序不是现有亮点的排列");
             }
             return;
@@ -205,7 +213,8 @@ public class ResumeProposalApplier {
             Set<String> fields = switch (target) {
                 case "EDUCATION" -> EDUCATION_FIELDS;
                 case "PROJECT" -> PROJECT_FIELDS;
-                case "HIGHLIGHT" -> HIGHLIGHT_FIELDS;
+                case "INTERNSHIP" -> INTERNSHIP_FIELDS;
+                case "HIGHLIGHT", "INTERNSHIP_HIGHLIGHT" -> HIGHLIGHT_FIELDS;
                 default -> Set.of();
             };
             if (operation.field() != null && !operation.field().isBlank()) {
@@ -245,6 +254,20 @@ public class ResumeProposalApplier {
         if (operation.highlight() != null) {
             checkLength(operation.highlight().content(), ResumeDocumentLimits.MAX_LONG_TEXT, "技术亮点");
         }
+        if (operation.internship() != null) {
+            var patch = operation.internship();
+            checkLength(patch.company(), ResumeDocumentLimits.MAX_SHORT_TEXT, "公司名称");
+            checkLength(patch.position(), ResumeDocumentLimits.MAX_SHORT_TEXT, "实习职位");
+            checkLength(patch.description(), ResumeDocumentLimits.MAX_LONG_TEXT, "实习工作内容");
+            if (patch.highlights() != null) {
+                if (patch.highlights().size() > ResumeDocumentLimits.MAX_HIGHLIGHTS_PER_INTERNSHIP) {
+                    throw invalid("实习工作与成果过多");
+                }
+                for (String highlight : patch.highlights()) {
+                    checkLength(highlight, ResumeDocumentLimits.MAX_LONG_TEXT, "工作与成果");
+                }
+            }
+        }
     }
 
     private void applyOperation(ResumeContent content, ResumeEditOperationDTO operation,
@@ -257,6 +280,9 @@ public class ResumeProposalApplier {
             case "EDUCATION" -> applyEducation(content, operation, op);
             case "PROJECT" -> applyProject(content, operation, op, generatedIds);
             case "HIGHLIGHT" -> applyHighlight(content, operation, op, generatedIds);
+            case "INTERNSHIP" -> applyInternship(content, operation, op, generatedIds);
+            case "INTERNSHIP_HIGHLIGHT" ->
+                applyInternshipHighlight(content, operation, op, generatedIds);
             default -> throw invalid("包含不支持的操作目标");
         }
     }
@@ -452,20 +478,151 @@ public class ResumeProposalApplier {
             }
             case "REORDER" -> {
                 ResumeContent.ProjectItem project = findProjectOrThrow(content, resolved);
-                Map<String, ResumeContent.HighlightItem> byId = new HashMap<>();
-                for (ResumeContent.HighlightItem highlight : project.getHighlights()) {
-                    byId.put(highlight.getId(), highlight);
-                }
-                List<ResumeContent.HighlightItem> reordered = new ArrayList<>();
-                for (String id : operation.values()) {
-                    ResumeContent.HighlightItem found = byId.remove(id);
-                    if (found != null) {
-                        reordered.add(found);
-                    }
-                }
-                project.setHighlights(reordered);
+                reorderHighlights(project.getHighlights(), operation.values());
             }
             default -> throw invalid("技术亮点不支持该操作");
+        }
+    }
+
+    private void applyInternship(ResumeContent content, ResumeEditOperationDTO operation, String op,
+                                 Map<String, String> generatedIds) {
+        List<ResumeContent.InternshipItem> items = content.getInternships();
+        switch (op) {
+            case "ADD" -> {
+                if (items.size() >= ResumeDocumentLimits.MAX_LIST_ITEMS) {
+                    throw invalid("实习经历数量已达上限");
+                }
+                String newId = UUID.randomUUID().toString();
+                if (!isBlank(operation.id())) {
+                    generatedIds.put(operation.id(), newId);
+                }
+                ResumeContent.InternshipItem item = new ResumeContent.InternshipItem();
+                item.setId(newId);
+                var patch = operation.internship();
+                if (patch != null) {
+                    item.setCompany(nonNull(patch.company()));
+                    item.setPosition(nonNull(patch.position()));
+                    item.setStartDate(nonNull(patch.startDate()));
+                    item.setEndDate(nonNull(patch.endDate()));
+                    item.setDescription(nonNull(patch.description()));
+                    if (patch.highlights() != null) {
+                        for (String text : patch.highlights()) {
+                            if (isBlank(text)) {
+                                continue;
+                            }
+                            ResumeContent.HighlightItem highlight = new ResumeContent.HighlightItem();
+                            highlight.setId(UUID.randomUUID().toString());
+                            highlight.setContent(text);
+                            item.getHighlights().add(highlight);
+                        }
+                    }
+                }
+                if (isBlank(item.getCompany()) && isBlank(item.getPosition())
+                    && isBlank(item.getDescription()) && item.getHighlights().isEmpty()) {
+                    throw invalid("新增实习经历内容为空");
+                }
+                items.add(item);
+            }
+            case "UPDATE" -> {
+                ResumeContent.InternshipItem item = findInternshipOrThrow(content, operation.id());
+                var patch = operation.internship();
+                if (patch != null) {
+                    setIfPresent(patch.company(), item::setCompany);
+                    setIfPresent(patch.position(), item::setPosition);
+                    setIfPresent(patch.startDate(), item::setStartDate);
+                    setIfPresent(patch.endDate(), item::setEndDate);
+                    setIfPresent(patch.description(), item::setDescription);
+                }
+                if (!isBlank(operation.field()) && operation.value() != null) {
+                    setInternshipField(item, operation.field(), operation.value());
+                }
+            }
+            case "DELETE" -> items.removeIf(item -> item.getId().equals(operation.id()));
+            default -> throw invalid("实习经历不支持该操作");
+        }
+    }
+
+    private void applyInternshipHighlight(ResumeContent content, ResumeEditOperationDTO operation,
+                                          String op, Map<String, String> generatedIds) {
+        String parentId = operation.parentId();
+        String resolved = parentId == null ? null
+            : generatedIds.getOrDefault(parentId, parentId);
+        switch (op) {
+            case "ADD" -> {
+                ResumeContent.InternshipItem internship = findInternshipOrThrow(content, resolved);
+                if (internship.getHighlights().size()
+                    >= ResumeDocumentLimits.MAX_HIGHLIGHTS_PER_INTERNSHIP) {
+                    throw invalid("实习工作与成果数量已达上限");
+                }
+                String text = operation.highlight() != null && !isBlank(operation.highlight().content())
+                    ? operation.highlight().content() : operation.value();
+                if (isBlank(text)) {
+                    throw invalid("新增工作与成果内容为空");
+                }
+                ResumeContent.HighlightItem highlight = new ResumeContent.HighlightItem();
+                highlight.setId(UUID.randomUUID().toString());
+                highlight.setContent(text);
+                if (operation.highlight() != null && operation.highlight().sortOrder() != null) {
+                    int position = Math.max(1, Math.min(operation.highlight().sortOrder(),
+                        internship.getHighlights().size() + 1));
+                    internship.getHighlights().add(position - 1, highlight);
+                } else {
+                    internship.getHighlights().add(highlight);
+                }
+            }
+            case "UPDATE" -> {
+                ResumeContent.HighlightItem highlight =
+                    findInternshipHighlightOrThrow(content, operation.id());
+                if (operation.highlight() != null) {
+                    setIfPresent(operation.highlight().content(), highlight::setContent);
+                }
+                if ("content".equals(operation.field()) && operation.value() != null) {
+                    highlight.setContent(operation.value());
+                }
+            }
+            case "DELETE" -> {
+                for (ResumeContent.InternshipItem internship : content.getInternships()) {
+                    internship.getHighlights().removeIf(
+                        highlight -> highlight.getId().equals(operation.id()));
+                }
+            }
+            case "REORDER" -> {
+                ResumeContent.InternshipItem internship = findInternshipOrThrow(content, resolved);
+                reorderHighlights(internship.getHighlights(), operation.values());
+            }
+            default -> throw invalid("工作与成果不支持该操作");
+        }
+    }
+
+    private void reorderHighlights(List<ResumeContent.HighlightItem> highlights, List<String> values) {
+        Map<String, ResumeContent.HighlightItem> byId = new HashMap<>();
+        for (ResumeContent.HighlightItem highlight : highlights) {
+            byId.put(highlight.getId(), highlight);
+        }
+        List<ResumeContent.HighlightItem> reordered = new ArrayList<>();
+        if (values != null) {
+            for (String id : values) {
+                ResumeContent.HighlightItem found = byId.remove(id);
+                if (found != null) {
+                    reordered.add(found);
+                }
+            }
+        }
+        for (int index = 0; index < reordered.size(); index++) {
+            reordered.get(index).setSortOrder(index + 1);
+        }
+        highlights.clear();
+        highlights.addAll(reordered);
+    }
+
+    private void setInternshipField(ResumeContent.InternshipItem item, String field, String value) {
+        switch (field) {
+            case "company" -> item.setCompany(value);
+            case "position" -> item.setPosition(value);
+            case "startDate" -> item.setStartDate(value);
+            case "endDate" -> item.setEndDate(value);
+            case "description" -> item.setDescription(value);
+            default -> throw invalid("包含不支持的实习经历字段");
         }
     }
 
@@ -517,6 +674,45 @@ public class ResumeProposalApplier {
         return project;
     }
 
+    private ResumeContent.InternshipItem findInternship(ResumeContent content, String id) {
+        if (id == null) {
+            return null;
+        }
+        return content.getInternships().stream()
+            .filter(item -> item.getId().equals(id))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private ResumeContent.InternshipItem findInternshipOrThrow(ResumeContent content, String id) {
+        ResumeContent.InternshipItem internship = findInternship(content, id);
+        if (internship == null) {
+            throw invalid("所属实习不存在");
+        }
+        return internship;
+    }
+
+    /** 项目与实习都能作为亮点列表的宿主，用于 REORDER 校验。 */
+    private List<ResumeContent.HighlightItem> findHighlightList(ResumeContent content, String parentId) {
+        ResumeContent.ProjectItem project = findProject(content, parentId);
+        if (project != null) {
+            return project.getHighlights();
+        }
+        ResumeContent.InternshipItem internship = findInternship(content, parentId);
+        return internship == null ? null : internship.getHighlights();
+    }
+
+    private ResumeContent.HighlightItem findInternshipHighlightOrThrow(ResumeContent content, String id) {
+        for (ResumeContent.InternshipItem internship : content.getInternships()) {
+            for (ResumeContent.HighlightItem highlight : internship.getHighlights()) {
+                if (highlight.getId().equals(id)) {
+                    return highlight;
+                }
+            }
+        }
+        throw invalid("工作与成果不存在");
+    }
+
     private ResumeContent.HighlightItem findHighlightOrThrow(ResumeContent content, String id) {
         for (ResumeContent.ProjectItem project : content.getProjects()) {
             for (ResumeContent.HighlightItem highlight : project.getHighlights()) {
@@ -541,6 +737,9 @@ public class ResumeProposalApplier {
         }
         for (ResumeContent.InternshipItem item : content.getInternships()) {
             ids.add(item.getId());
+            for (ResumeContent.HighlightItem highlight : item.getHighlights()) {
+                ids.add(highlight.getId());
+            }
         }
         for (ResumeContent.AwardItem item : content.getAwards()) {
             ids.add(item.getId());

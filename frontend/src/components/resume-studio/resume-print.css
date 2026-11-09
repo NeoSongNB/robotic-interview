@@ -28,17 +28,28 @@
 }
 
 .rt-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: center;
+  column-gap: 20px;
   border-bottom: 2px solid var(--rt-accent);
   padding-bottom: 10px;
   margin-bottom: 14px;
 }
 
 .rt-name {
+  overflow-wrap: anywhere;
   margin: 0;
   font-size: 22pt;
   font-weight: 700;
   letter-spacing: 2px;
   line-height: 1.25;
+}
+
+.rt-header-details {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .rt-name-placeholder {
@@ -54,6 +65,7 @@
 
 .rt-contact {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 2px 16px;
   margin-top: 8px;
@@ -62,7 +74,14 @@
 }
 
 .rt-contact-item {
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 长作品链接允许换行，不能把页首撑破或截断 */
+.rt-contact-link {
+  max-width: 100%;
 }
 
 .rt-section {
@@ -92,6 +111,11 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.rt-item-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rt-item-title {
@@ -135,7 +159,8 @@
 
 .rt-highlights {
   margin: 5px 0 0;
-  padding-left: 18px;
+  padding-inline-start: 18px;
+  list-style: disc outside;
 }
 
 .rt-highlights li {
@@ -215,7 +240,15 @@
     display: none !important;
   }
 
+  /* 栏目标题不能单独留在页尾；条目标题行不能与正文分离 */
   .rt-section-title {
+    break-after: avoid;
+    page-break-after: avoid;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .rt-item-head {
     break-after: avoid;
     page-break-after: avoid;
   }
@@ -225,6 +258,14 @@
   .rt-header {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  /* 文字始终可选中、可复制；不通过缩放字号或裁剪正文来强压一页 */
+  .resume-print-root .resume-template,
+  .resume-print-root .rt-summary,
+  .resume-print-root .rt-highlights {
+    user-select: text;
+    overflow: visible;
   }
 
   .rt-link {
