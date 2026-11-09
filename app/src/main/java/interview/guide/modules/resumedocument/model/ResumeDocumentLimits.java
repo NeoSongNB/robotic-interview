@@ -14,6 +14,7 @@ public final class ResumeDocumentLimits {
     public static final int MAX_OPERATIONS = 20;
     public static final int MAX_LIST_ITEMS = 30;
     public static final int MAX_HIGHLIGHTS_PER_PROJECT = 50;
+    public static final int MAX_HIGHLIGHTS_PER_INTERNSHIP = 50;
     public static final int MAX_SKILLS = 100;
     public static final int MAX_SHORT_TEXT = 200;
     public static final int MAX_LONG_TEXT = 4000;

@@ -66,7 +66,14 @@ export function resumeToMarkdown(title: string, content: ResumeContent): string 
       const meta = [item.position, period(item.startDate, item.endDate)]
         .filter(Boolean).join(' · ');
       if (meta) lines.push(meta, '');
-      if (has(item.description)) lines.push(item.description, '');
+      const highlights = [...(item.highlights ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((highlight) => highlight.content.trim())
+        .filter(Boolean);
+      if (has(item.description) && !highlights.includes(item.description.trim())) {
+        lines.push(item.description, '');
+      }
+      if (highlights.length > 0) lines.push(...highlights.map((highlight) => `- ${highlight}`), '');
     }
   }
 

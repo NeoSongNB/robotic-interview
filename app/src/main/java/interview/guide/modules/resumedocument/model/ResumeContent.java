@@ -12,7 +12,8 @@ import java.util.List;
  * 序列化/反序列化，便于提案按「稳定 ID」做增量修改；对外的请求体仍使用不可变 record。</p>
  *
  * <p>education / projects / highlights / internships / awards 每条记录都有稳定 id，
- * 不依赖数组下标；internships / awards 第一版只预留结构，后续可直接扩展。</p>
+ * 不依赖数组下标；实习的 description 是历史字段，与新的 highlights 并存，
+ * 加载时原样保留，展示时去重，合并必须由用户主动确认。</p>
  */
 @Data
 public class ResumeContent {
@@ -74,7 +75,10 @@ public class ResumeContent {
         private String position = "";
         private String startDate = "";
         private String endDate = "";
+        /** 旧版单段工作内容：必须完整保留，不因新增成果列表而丢失。 */
         private String description = "";
+        /** 新版「工作与成果」逐条记录，与项目亮点共用稳定 ID 与 sortOrder。 */
+        private List<HighlightItem> highlights = new ArrayList<>();
     }
 
     @Data

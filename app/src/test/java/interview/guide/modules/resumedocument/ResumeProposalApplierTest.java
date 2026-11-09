@@ -213,4 +213,105 @@ class ResumeProposalApplierTest {
     assertThat(discarded.operations()).hasSize(1);
     assertThat(codec.serialize(codec.normalize(content))).isEqualTo(before);
   }
+
+  private ResumeContent contentWithInternship() {
+    ResumeContent content = codec.blank();
+    ResumeContent.HighlightItem first = new ResumeContent.HighlightItem();
+    first.setId("ih-1");
+    first.setContent("负责订单模块接口开发");
+    first.setSortOrder(1);
+    ResumeContent.HighlightItem second = new ResumeContent.HighlightItem();
+    second.setId("ih-2");
+    second.setContent("用单测验证接口边界");
+    second.setSortOrder(2);
+    ResumeContent.InternshipItem internship = new ResumeContent.InternshipItem();
+    internship.setId("intern-1");
+    internship.setCompany("某科技");
+    internship.setPosition("后端实习生");
+    internship.setDescription("参与后台接口开发与联调");
+    internship.setHighlights(new ArrayList<>(List.of(first, second)));
+    content.setInternships(new ArrayList<>(List.of(internship)));
+    return content;
+  }
+
+  private ResumeEditOperationDTO internshipOp(
+      String op, String target, String id, String parentId,
+      ResumeEditOperationDTO.InternshipPatch internship,
+      ResumeEditOperationDTO.HighlightPatch highlight, List<String> values) {
+    return new ResumeEditOperationDTO(
+        op, target, id, parentId, null, null, values, null, null, highlight, internship);
+  }
+
+  @Test
+  @DisplayName("新增实习经历与逐条工作与成果，旧 description 保留且每条有稳定 ID")
+  void addsInternshipWithHighlights() {
+    var patch = new ResumeEditOperationDTO.InternshipPatch(
+        "腾讯", "后端实习生", "2025-07", "2025-09",
+        "参与后台接口开发与联调", List.of("负责订单模块接口开发", "用单测验证接口边界"));
+    var result = applier.apply(contentWithProject(), proposal(
+        internshipOp("ADD", "INTERNSHIP", null, null, patch, null, null)));
+
+    assertThat(result.getInternships()).hasSize(1);
+    var internship = result.getInternships().get(0);
+    assertThat(internship.getId()).isNotBlank();
+    assertThat(internship.getCompany()).isEqualTo("腾讯");
+    assertThat(internship.getDescription()).isEqualTo("参与后台接口开发与联调");
+    assertThat(internship.getHighlights())
+        .extracting(ResumeContent.HighlightItem::getContent)
+        .containsExactly("负责订单模块接口开发", "用单测验证接口边界");
+    assertThat(internship.getHighlights())
+        .extracting(ResumeContent.HighlightItem::getSortOrder)
+        .containsExactly(1, 2);
+    assertThat(internship.getHighlights().get(0).getId()).isNotBlank();
+    assertThat(result.getProjects()).hasSize(1);
+    codec.validate(result);
+  }
+
+  @Test
+  @DisplayName("实习成果重排必须是现有 ID 的完整排列，否则拒绝提案")
+  void reordersInternshipHighlightsOnlyWithFullPermutation() {
+    var result = applier.apply(contentWithInternship(), proposal(
+        internshipOp("REORDER", "INTERNSHIP_HIGHLIGHT", null, "intern-1", null, null,
+            List.of("ih-2", "ih-1"))));
+    assertThat(result.getInternships().get(0).getHighlights())
+        .extracting(ResumeContent.HighlightItem::getContent)
+        .containsExactly("用单测验证接口边界", "负责订单模块接口开发");
+
+    ResumeContent content = contentWithInternship();
+    var invalid = proposal(internshipOp("REORDER", "INTERNSHIP_HIGHLIGHT", null,
+        "intern-1", null, null, List.of("ih-1")));
+    assertInvalid(() -> applier.apply(content, invalid));
+  }
+
+  @Test
+  @DisplayName("确认后的提案只更新目标实习成果条目")
+  void updatesOnlyTargetInternshipHighlight() {
+    var update = new ResumeEditOperationDTO(
+        "UPDATE", "INTERNSHIP_HIGHLIGHT", "ih-1", null, "content",
+        "负责订单模块接口开发并补充边界用例", null, null, null, null, null);
+    var result = applier.apply(contentWithInternship(), proposal(update));
+
+    assertThat(result.getInternships().get(0).getHighlights())
+        .extracting(ResumeContent.HighlightItem::getContent)
+        .containsExactly("负责订单模块接口开发并补充边界用例", "用单测验证接口边界");
+    assertThat(result.getInternships().get(0).getDescription())
+        .isEqualTo("参与后台接口开发与联调");
+  }
+
+  @Test
+  @DisplayName("缺少事实只追问、拒绝或校验失败的提案都不会写入数据")
+  void clarificationAndRejectedProposalDoNotWrite() {
+    ResumeContent content = contentWithInternship();
+    String before = codec.serialize(codec.normalize(content));
+
+    var clarify = new ResumeEditProposalDTO(
+        "需要补充信息", List.of(), List.of(), true, "你具体负责了哪个模块？", 0L);
+    assertThatCode(() -> applier.validate(content, clarify)).doesNotThrowAnyException();
+
+    var invalid = proposal(internshipOp("ADD", "INTERNSHIP_HIGHLIGHT", null,
+        "not-exist", null, new ResumeEditOperationDTO.HighlightPatch("编造的成果", 1), null));
+    assertInvalid(() -> applier.apply(content, invalid));
+
+    assertThat(codec.serialize(codec.normalize(content))).isEqualTo(before);
+  }
 }

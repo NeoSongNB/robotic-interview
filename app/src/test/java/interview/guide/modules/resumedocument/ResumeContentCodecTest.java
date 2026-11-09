@@ -200,4 +200,50 @@ class ResumeContentCodecTest {
         .extracting(error -> ((BusinessException) error).getCode())
         .isEqualTo(ErrorCode.RESUME_DOCUMENT_CONTENT_INVALID.getCode());
   }
+
+  @Test
+  @DisplayName("历史简历只有旧版实习 description：完整保留、补齐空成果列表、稳定 ID 不变")
+  void keepsLegacyInternshipDescription() {
+    String json = """
+        {"basicInfo":{"name":"王五","school":"XX 大学","major":"软件工程","degree":"本科"},
+         "internships":[{"id":"old-intern","company":"某科技","position":"实习生",
+           "description":"参与后台接口开发与联调，完成 12 个接口的测试用例验证。"}]}
+        """;
+    ResumeContent content = codec.normalize(codec.deserialize(json));
+
+    ResumeContent.InternshipItem internship = content.getInternships().get(0);
+    assertThat(internship.getId()).isEqualTo("old-intern");
+    assertThat(internship.getDescription())
+        .isEqualTo("参与后台接口开发与联调，完成 12 个接口的测试用例验证。");
+    assertThat(internship.getHighlights()).isEmpty();
+    assertThat(content.getBasicInfo().getSchool()).isEqualTo("XX 大学");
+    assertThat(codec.serialize(content)).contains("参与后台接口开发与联调");
+    codec.validate(content);
+  }
+
+  @Test
+  @DisplayName("新版实习工作与成果按 sortOrder 排序并生成互不重复的稳定 ID")
+  void normalizesInternshipHighlights() {
+    ResumeContent raw = codec.blank();
+    ResumeContent.HighlightItem second = new ResumeContent.HighlightItem();
+    second.setId("same-id");
+    second.setContent("用单测验证接口边界");
+    second.setSortOrder(2);
+    ResumeContent.HighlightItem first = new ResumeContent.HighlightItem();
+    first.setId("same-id");
+    first.setContent("负责订单模块接口开发");
+    first.setSortOrder(1);
+    ResumeContent.InternshipItem internship = new ResumeContent.InternshipItem();
+    internship.setHighlights(new java.util.ArrayList<>(java.util.List.of(second, first)));
+    raw.setInternships(new java.util.ArrayList<>(java.util.List.of(internship)));
+
+    var highlights = codec.normalize(raw).getInternships().get(0).getHighlights();
+    assertThat(highlights)
+        .extracting(ResumeContent.HighlightItem::getContent)
+        .containsExactly("负责订单模块接口开发", "用单测验证接口边界");
+    assertThat(highlights)
+        .extracting(ResumeContent.HighlightItem::getSortOrder)
+        .containsExactly(1, 2);
+    assertThat(highlights.get(0).getId()).isNotEqualTo(highlights.get(1).getId());
+  }
 }

@@ -47,7 +47,10 @@ export interface ResumeInternship {
   position: string;
   startDate: string;
   endDate: string;
+  /** 旧版单段工作内容：历史数据必须完整保留、可编辑，不能静默丢弃。 */
   description: string;
+  /** 新版「工作与成果」逐条记录，复用项目亮点的稳定 ID 与 sortOrder 规则。 */
+  highlights: ResumeHighlight[];
 }
 
 export interface ResumeAward {
@@ -78,7 +81,9 @@ export interface ResumeDocument {
 }
 
 export type ResumeEditOp = 'ADD' | 'UPDATE' | 'DELETE' | 'REORDER';
-export type ResumeEditTarget = 'BASIC_INFO' | 'EDUCATION' | 'PROJECT' | 'HIGHLIGHT' | 'SKILL';
+export type ResumeEditTarget =
+  | 'BASIC_INFO' | 'EDUCATION' | 'PROJECT' | 'HIGHLIGHT' | 'SKILL'
+  | 'INTERNSHIP' | 'INTERNSHIP_HIGHLIGHT';
 
 export interface ResumeEditOperation {
   op: string;
@@ -99,6 +104,14 @@ export interface ResumeEditOperation {
     endDate?: string | null;
   } | null;
   highlight?: { content?: string | null; sortOrder?: number | null } | null;
+  internship?: {
+    company?: string | null;
+    position?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    description?: string | null;
+    highlights?: string[] | null;
+  } | null;
 }
 
 export interface ResumeEditProposal {
@@ -138,6 +151,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** 项目亮点与实习「工作与成果」共用：稳定 ID、按序号排序、回填连续 sortOrder。 */
+function normalizeHighlights(raw: unknown): ResumeHighlight[] {
+  return asArray(raw)
+    .map((item, index) => {
+      const record = isRecord(item) ? item : {};
+      return {
+        id: asString(record.id) || newLocalId(),
+        content: asString(record.content),
+        sortOrder: typeof record.sortOrder === 'number' ? record.sortOrder : index + 1,
+      };
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((item, index) => ({...item, sortOrder: index + 1}));
+}
+
 export function newLocalId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -168,22 +196,13 @@ export function normalizeResumeContent(raw: unknown): ResumeContent {
 
   const projects = asArray(source.projects).map((item) => {
     const record = isRecord(item) ? item : {};
-    const highlights = asArray(record.highlights).map((highlight, index) => {
-      const highlightRecord = isRecord(highlight) ? highlight : {};
-      return {
-        id: asString(highlightRecord.id) || newLocalId(),
-        content: asString(highlightRecord.content),
-        sortOrder: typeof highlightRecord.sortOrder === 'number'
-          ? highlightRecord.sortOrder : index + 1,
-      };
-    }).sort((a, b) => a.sortOrder - b.sortOrder);
     return {
       id: asString(record.id) || newLocalId(),
       name: asString(record.name),
       url: asString(record.url),
       summary: asString(record.summary),
       techStack: asStringArray(record.techStack),
-      highlights,
+      highlights: normalizeHighlights(record.highlights),
       startDate: asString(record.startDate),
       endDate: asString(record.endDate),
     };
@@ -198,6 +217,7 @@ export function normalizeResumeContent(raw: unknown): ResumeContent {
       startDate: asString(record.startDate),
       endDate: asString(record.endDate),
       description: asString(record.description),
+      highlights: normalizeHighlights(record.highlights),
     };
   });
 
@@ -228,6 +248,8 @@ export function createBlankResumeContent(): ResumeContent {
 const TARGET_LABELS: Record<string, string> = {
   BASIC_INFO: '个人信息',
   EDUCATION: '教育经历',
+  INTERNSHIP: '实习经历',
+  INTERNSHIP_HIGHLIGHT: '工作与成果',
   PROJECT: '项目经历',
   HIGHLIGHT: '技术亮点',
   SKILL: '专业技能',
@@ -245,6 +267,7 @@ export function describeOperation(operation: ResumeEditOperation): string {
   const op = OP_LABELS[operation.op] ?? operation.op ?? '处理';
   const target = TARGET_LABELS[operation.target] ?? operation.target ?? '内容';
   const detail = operation.project?.name
+    || operation.internship?.company
     || operation.education?.school
     || operation.value
     || operation.highlight?.content

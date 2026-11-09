@@ -1,193 +1,109 @@
-import type {ReactNode} from 'react';
 import type {ResumeContent} from '../../types/resumeDocument';
+import {
+  buildResumeViewModel,
+  type ResumeViewItem,
+  type ResumeViewSection,
+} from '../../types/resumeViewModel';
 
 interface ResumeTemplateProps {
   content: ResumeContent;
-  /** true 时用于打印：隐藏空白占位与未填写的模块。 */
+  /** true 时用于打印副本；栏目顺序与隐藏规则由视图模型统一决定。 */
   printMode?: boolean;
 }
 
-interface SectionProps {
-  title: string;
-  empty: boolean;
-  printMode: boolean;
-  children: ReactNode;
+function dateRange(date: string): string {
+  return date;
 }
 
-function Section({title, empty, printMode, children}: SectionProps) {
-  if (empty && printMode) return null;
+function Link({value}: {value: string}) {
   return (
-    <section className="rt-section">
-      <h2 className="rt-section-title">{title}</h2>
-      {empty ? (
-        <div className="rt-empty">尚未填写，可在左侧通过 AI 对话补充</div>
-      ) : children}
+    <a className="rt-link" href={value} target="_blank" rel="noreferrer">
+      {value}
+    </a>
+  );
+}
+
+function Item({item}: {item: ResumeViewItem}) {
+  return (
+    <div className="rt-item">
+      <div className="rt-item-head">
+        <div className="rt-item-heading">
+          <span className="rt-item-title">{item.title}</span>
+          {item.subtitle && <span className="rt-item-sub">{`  ·  ${item.subtitle}`}</span>}
+        </div>
+        {item.date && <span className="rt-item-date">{dateRange(item.date)}</span>}
+      </div>
+      {item.links.length > 0 && (
+        <div className="rt-muted-line">
+          {item.links.map(link => <Link key={link} value={link}/>)}
+        </div>
+      )}
+      {item.tags.length > 0 && (
+        <div className="rt-tags">
+          {item.tags.map(tag => <span className="rt-tag" key={tag}>{tag}</span>)}
+        </div>
+      )}
+      {item.summary && <div className="rt-summary">{item.summary}</div>}
+      {item.highlights.length > 0 && (
+        <ul className="rt-highlights">
+          {item.highlights.map((highlight, index) => (
+            <li key={`${item.id}-${index}`}>{highlight}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Section({section}: {section: ResumeViewSection}) {
+  return (
+    <section className="rt-section" data-section={section.key}>
+      <h2 className="rt-section-title">{section.title}</h2>
+      {section.skills.length > 0 && (
+        <div className="rt-skills">
+          {section.skills.map(skill => (
+            <span className="rt-skill" key={skill}>{skill}</span>
+          ))}
+        </div>
+      )}
+      {section.items.map(item => <Item key={item.id} item={item}/>)}
     </section>
   );
 }
 
-function hasText(value?: string | null): boolean {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function dateRange(startDate: string, endDate: string): string {
-  const parts = [startDate, endDate].filter(hasText);
-  return parts.join(' — ');
-}
-
-function Link({value}: {value: string}) {
-  if (!hasText(value)) return null;
-  if (/^https?:\/\//i.test(value.trim())) {
-    return (
-      <a className="rt-link" href={value.trim()} target="_blank" rel="noreferrer">
-        {value.trim()}
-      </a>
-    );
-  }
-  return <span>{value}</span>;
-}
-
 /**
- * 默认简历模板（第一版唯一模板）。
- * 预览与 PDF 打印共用本组件与 resume-print.css，只通过 printMode 控制空白占位。
+ * 默认简历模板。
+ * 屏幕预览与浏览器「另存为 PDF」共用本组件、视图模型与 resume-print.css，
+ * 因此栏目顺序、空栏目隐藏与内容去重在两处完全一致。
  */
 export default function ResumeTemplate({content, printMode = false}: ResumeTemplateProps) {
-  const info = content.basicInfo;
-  const contacts = [
-    info.phone,
-    info.email,
-    info.githubUrl,
-    info.blogUrl,
-  ].filter(hasText);
-
-  const education = content.education.filter(item =>
-    hasText(item.school) || hasText(item.major) || hasText(item.description));
-  const projects = content.projects.filter(item =>
-    hasText(item.name) || hasText(item.summary) || item.highlights.some(h => hasText(h.content)));
-  const skills = content.skills.filter(hasText);
-  const internships = content.internships.filter(item =>
-    hasText(item.company) || hasText(item.position) || hasText(item.description));
-  const awards = content.awards.filter(item => hasText(item.name) || hasText(item.description));
+  const view = buildResumeViewModel(content);
 
   return (
-    <div className="resume-template">
+    <div className={`resume-template${printMode ? ' resume-template-print' : ''}`}>
       <div className="resume-sheet">
         <header className="rt-header">
-          <h1 className={`rt-name${hasText(info.name) ? '' : ' rt-name-placeholder'}`}>
-            {hasText(info.name) ? info.name : '你的姓名'}
+          <h1 className={`rt-name${view.header.name ? '' : ' rt-name-placeholder'}`}>
+            {view.header.name || '你的姓名'}
           </h1>
-          {hasText(info.targetPosition) && (
-            <div className="rt-target">求职意向：{info.targetPosition}</div>
-          )}
-          {contacts.length > 0 && (
-            <div className="rt-contact">
-              {contacts.map((item, index) => (
-                <span className="rt-contact-item" key={`${item}-${index}`}>
-                  <Link value={item}/>
-                </span>
-              ))}
-            </div>
-          )}
-          {(hasText(info.school) || hasText(info.major) || hasText(info.degree)) && (
-            <div className="rt-contact">
-              {[info.school, info.major, info.degree].filter(hasText).map((item, index) => (
-                <span className="rt-contact-item" key={`${item}-${index}`}>{item}</span>
-              ))}
-            </div>
-          )}
+          <div className="rt-header-details">
+            {view.header.targetPosition && (
+              <div className="rt-target">求职意向：{view.header.targetPosition}</div>
+            )}
+            {(view.header.contacts.length > 0 || view.header.links.length > 0) && (
+              <div className="rt-contact">
+                {view.header.contacts.map((contact, index) => (
+                  <span className="rt-contact-item" key={`${contact}-${index}`}>{contact}</span>
+                ))}
+                {view.header.links.map(link => (
+                  <span className="rt-contact-item rt-contact-link" key={link}><Link value={link}/></span>
+                ))}
+              </div>
+            )}
+          </div>
         </header>
 
-        <Section title="教育经历" empty={education.length === 0} printMode={printMode}>
-          {education.map(item => (
-            <div className="rt-item" key={item.id}>
-              <div className="rt-item-head">
-                <div>
-                  <span className="rt-item-title">{item.school}</span>
-                  {(hasText(item.major) || hasText(item.degree)) && (
-                    <span className="rt-item-sub">
-                      {'  ·  '}{[item.major, item.degree].filter(hasText).join(' · ')}
-                    </span>
-                  )}
-                </div>
-                <span className="rt-item-date">{dateRange(item.startDate, item.endDate)}</span>
-              </div>
-              {hasText(item.description) && <div className="rt-summary">{item.description}</div>}
-            </div>
-          ))}
-        </Section>
-
-        <Section title="专业技能" empty={skills.length === 0} printMode={printMode}>
-          <div className="rt-skills">
-            {skills.map((skill, index) => (
-              <span className="rt-skill" key={`${skill}-${index}`}>{skill}</span>
-            ))}
-          </div>
-        </Section>
-
-        <Section title="项目经历" empty={projects.length === 0} printMode={printMode}>
-          {projects.map(project => {
-            const highlights = [...project.highlights]
-              .sort((a, b) => a.sortOrder - b.sortOrder)
-              .filter(item => hasText(item.content));
-            const techStack = project.techStack.filter(hasText);
-            return (
-              <div className="rt-item" key={project.id}>
-                <div className="rt-item-head">
-                  <span className="rt-item-title">{project.name || '未命名项目'}</span>
-                  <span className="rt-item-date">{dateRange(project.startDate, project.endDate)}</span>
-                </div>
-                {hasText(project.url) && (
-                  <div className="rt-muted-line"><Link value={project.url}/></div>
-                )}
-                {techStack.length > 0 && (
-                  <div className="rt-tags">
-                    {techStack.map((tech, index) => (
-                      <span className="rt-tag" key={`${tech}-${index}`}>{tech}</span>
-                    ))}
-                  </div>
-                )}
-                {hasText(project.summary) && <div className="rt-summary">{project.summary}</div>}
-                {highlights.length > 0 && (
-                  <ul className="rt-highlights">
-                    {highlights.map(highlight => (
-                      <li key={highlight.id}>{highlight.content}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </Section>
-
-        {internships.length > 0 && (
-          <Section title="实习经历" empty={false} printMode={printMode}>
-            {internships.map(item => (
-              <div className="rt-item" key={item.id}>
-                <div className="rt-item-head">
-                  <span className="rt-item-title">
-                    {item.company}{hasText(item.position) ? ` · ${item.position}` : ''}
-                  </span>
-                  <span className="rt-item-date">{dateRange(item.startDate, item.endDate)}</span>
-                </div>
-                {hasText(item.description) && <div className="rt-summary">{item.description}</div>}
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {awards.length > 0 && (
-          <Section title="获奖经历" empty={false} printMode={printMode}>
-            {awards.map(item => (
-              <div className="rt-item" key={item.id}>
-                <div className="rt-item-head">
-                  <span className="rt-item-title">{item.name}</span>
-                  {hasText(item.date) && <span className="rt-item-date">{item.date}</span>}
-                </div>
-                {hasText(item.description) && <div className="rt-summary">{item.description}</div>}
-              </div>
-            ))}
-          </Section>
-        )}
+        {view.sections.map(section => <Section key={section.key} section={section}/>)}
       </div>
     </div>
   );

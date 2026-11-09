@@ -143,6 +143,20 @@ public class ResumeContentCodec {
                 checkLongText(highlight.getContent(), "技术亮点");
             }
         }
+        for (ResumeContent.InternshipItem item : content.getInternships()) {
+            checkText(item.getCompany(), "公司名称");
+            checkText(item.getPosition(), "实习职位");
+            checkLongText(item.getDescription(), "实习工作内容");
+            checkSize(item.getHighlights().size(),
+                ResumeDocumentLimits.MAX_HIGHLIGHTS_PER_INTERNSHIP, "实习工作与成果");
+            for (ResumeContent.HighlightItem highlight : item.getHighlights()) {
+                checkLongText(highlight.getContent(), "工作与成果");
+            }
+        }
+        for (ResumeContent.AwardItem item : content.getAwards()) {
+            checkText(item.getName(), "奖项名称");
+            checkLongText(item.getDescription(), "奖项说明");
+        }
     }
 
     /**
@@ -606,15 +620,26 @@ public class ResumeContentCodec {
         return result;
     }
 
+    /**
+     * 项目亮点与实习「工作与成果」共用：先按 sortOrder 排序（与前端一致），
+     * 再回填连续的稳定序号；排序是稳定的，旧数据 sortOrder 全为 0 时保持原顺序。
+     */
     private List<ResumeContent.HighlightItem> normalizeHighlights(
         List<ResumeContent.HighlightItem> source, Set<String> usedIds) {
         List<ResumeContent.HighlightItem> result = new ArrayList<>();
         if (source == null) {
             return result;
         }
+        List<ResumeContent.HighlightItem> sorted = new ArrayList<>();
         for (ResumeContent.HighlightItem item : source) {
-            if (item == null || result.size() >= ResumeDocumentLimits.MAX_HIGHLIGHTS_PER_PROJECT) {
-                continue;
+            if (item != null) {
+                sorted.add(item);
+            }
+        }
+        sorted.sort((left, right) -> Integer.compare(left.getSortOrder(), right.getSortOrder()));
+        for (ResumeContent.HighlightItem item : sorted) {
+            if (result.size() >= ResumeDocumentLimits.MAX_HIGHLIGHTS_PER_PROJECT) {
+                break;
             }
             item.setId(stableId(item.getId(), usedIds));
             item.setContent(longText(item.getContent()));
@@ -640,6 +665,7 @@ public class ResumeContentCodec {
             item.setStartDate(text(item.getStartDate()));
             item.setEndDate(text(item.getEndDate()));
             item.setDescription(longText(item.getDescription()));
+            item.setHighlights(normalizeHighlights(item.getHighlights(), usedIds));
             result.add(item);
         }
         return result;

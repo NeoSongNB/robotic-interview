@@ -23,9 +23,10 @@ interface ResumeChatProps {
 
 const QUICK_PROMPTS = [
   '我叫张三，电话 13800138000，邮箱 zhangsan@example.com',
+  '把这段实习经历拆成 2–4 条工作与成果，第一条放与岗位最相关的贡献',
+  '帮我看看实习经历里哪些内容重复、哪些该放在前面',
   '添加一个「智能面试平台」项目，使用 Spring Boot 和 RAG 技术',
-  '把项目技术亮点润色得更专业一些',
-  '求职意向改为 Java 后端开发工程师',
+  '求职意向改为后端开发实习生',
 ];
 
 function needsCredentialSetup(message: string): boolean {

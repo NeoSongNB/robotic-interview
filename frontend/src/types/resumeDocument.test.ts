@@ -99,3 +99,31 @@ test('提案明细可读且能识别高影响删除操作', () => {
   assert.equal(hasDeleteOperation(proposal ?? null), true);
   assert.equal(hasDeleteOperation(null), false);
 });
+
+test('旧版实习 description 完整保留，新的工作与成果条目按序号排序', () => {
+  const legacy = normalizeResumeContent({
+    internships: [{id: 'old-1', company: '某科技', description: '参与接口开发与联调'}],
+  });
+  assert.equal(legacy.internships[0].description, '参与接口开发与联调');
+  assert.deepEqual(legacy.internships[0].highlights, []);
+
+  const modern = normalizeResumeContent({
+    internships: [{
+      id: 'new-1', company: '腾讯',
+      highlights: [
+        {id: 'b', content: '第二条', sortOrder: 2},
+        {id: 'a', content: '第一条', sortOrder: 1},
+      ],
+    }],
+  });
+  assert.deepEqual(modern.internships[0].highlights.map(item => item.content),
+    ['第一条', '第二条']);
+  assert.deepEqual(modern.internships[0].highlights.map(item => item.sortOrder), [1, 2]);
+});
+
+test('实习相关 AI 操作目标在提案明细中有可读名称', () => {
+  assert.match(describeOperation({op: 'UPDATE', target: 'INTERNSHIP',
+    internship: {company: '腾讯'}}), /修改实习经历：腾讯/);
+  assert.match(describeOperation({op: 'REORDER', target: 'INTERNSHIP_HIGHLIGHT'}),
+    /调整顺序工作与成果/);
+});

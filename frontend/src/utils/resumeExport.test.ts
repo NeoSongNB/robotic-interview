@@ -51,6 +51,28 @@ test('项目亮点按 sortOrder 排序而不是数组顺序', () => {
   assert.match(md, /技术栈：Spring Boot、Redis/);
 });
 
+test('Markdown 导出按顺序保留实习成果和历史描述', () => {
+  const content = blank();
+  content.internships = [
+    {
+      id: 'i1', company: '示例公司', position: '实习生', startDate: '', endDate: '',
+      description: '第一条成果',
+      highlights: [
+        { id: 'h2', content: '第二条成果', sortOrder: 2 },
+        { id: 'h1', content: '第一条成果', sortOrder: 1 },
+      ],
+    },
+    {
+      id: 'i2', company: '另一家公司', position: '实习生', startDate: '', endDate: '',
+      description: '历史简历的工作描述', highlights: [],
+    },
+  ];
+  const md = resumeToMarkdown('简历', content);
+  assert.match(md, /- 第一条成果\n- 第二条成果/);
+  assert.equal(md.match(/第一条成果/g)?.length, 1);
+  assert.match(md, /历史简历的工作描述/);
+});
+
 test('JSON 导出可解析且保留完整结构', () => {
   const content = blank();
   content.basicInfo.name = '张三';
