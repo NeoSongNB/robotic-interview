@@ -1,6 +1,7 @@
 /*
  * AI Interview Platform - Backend Application
- * Spring Boot 4.1 + Java 25 + Spring AI 2.0 + PostgreSQL + pgvector + RustFS + Redis
+ * Spring Boot 4.1 + Java 25 + Spring AI 2.0 + PostgreSQL + RustFS + Redis
+ * （历史 Flyway 迁移仍需要 pgvector 扩展，当前业务已不使用向量库）
  */
 
 plugins {
@@ -48,8 +49,6 @@ dependencies {
 
     // Spring AI 2.0 - OpenAI兼容模式 (阿里云DashScope)
     implementation "org.springframework.ai:spring-ai-starter-model-openai:${libs.versions.springAi.get()}"
-    // Spring AI 2.0 - PostgreSQL Vector Store (pgvector)
-    implementation "org.springframework.ai:spring-ai-starter-vector-store-pgvector:${libs.versions.springAi.get()}"
     // spring-ai-agent-utils core library
     implementation libs.spring.ai.agent.utils
 
@@ -117,7 +116,7 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform {
-        excludeTags 'rag-eval', 'voice-context-eval'
+        excludeTags 'voice-context-eval'
     }
     jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
@@ -139,35 +138,6 @@ tasks.register('voiceContextEvaluation', Test) {
                 if (System.getenv(key) == null) { environment key, value }
             }
         }
-    }
-}
-
-// RAG 测评任务（P1-01）：只运行 rag-eval 标签，需要 RUN_RAG_EVAL=true 防误触付费调用
-// 运行方式：RUN_RAG_EVAL=true REDIS_DATABASE=1 ./gradlew :app:ragEvaluation --no-daemon
-tasks.register('ragEvaluation', Test) {
-    description = '运行 RAG 测评（需要 RUN_RAG_EVAL=true 与本地 PostgreSQL/Redis/LLM Provider）'
-    group = 'verification'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform {
-        includeTags 'rag-eval'
-    }
-    jvmArgs '--enable-native-access=ALL-UNNAMED'
-    systemProperty 'ragEval.reportDir', layout.buildDirectory.dir('reports/rag-eval').get().asFile.absolutePath
-    outputs.upToDateWhen { false }
-    // 加载仓库根目录 .env，保证 APP_AI_CONFIG_ENCRYPTION_KEY 等变量不依赖手工导出
-    def envFile = rootProject.file('.env')
-    if (envFile.exists()) {
-        envFile.eachLine { line ->
-            def trimmed = line.trim()
-            if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
-                def (key, value) = trimmed.split('=', 2)
-                if (System.getenv(key) == null) { environment key, value }
-            }
-        }
-    }
-    testLogging {
-        events 'passed', 'skipped', 'failed'
     }
 }
 

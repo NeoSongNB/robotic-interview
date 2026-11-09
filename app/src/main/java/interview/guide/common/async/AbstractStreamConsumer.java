@@ -166,7 +166,7 @@ public abstract class AbstractStreamConsumer<T> {
      *
      * <p>只读取异常类名，绝不回显 message / cause 文本：上游 SDK 可能把 API Key、
      * Prompt 或文档片段塞进异常消息。这样既保留脱敏约束，又让用户能看懂
-     * 「为什么向量化失败」，而不是只看到一句 failed after retry 3。</p>
+     * 「为什么 AI 分析失败」，而不是只看到一句 failed after retry 3。</p>
      */
     protected String failureReason(Throwable error) {
         Throwable cursor = error;
@@ -182,7 +182,7 @@ public abstract class AbstractStreamConsumer<T> {
                 return "供应商限流：请稍后重试";
             }
             if (type.contains("BadRequest") || type.contains("InvalidRequest")) {
-                return "供应商请求参数错误：请检查模型名与向量维度配置";
+                return "供应商请求参数错误：请检查模型名与请求参数";
             }
             if (type.contains("NotFound")) {
                 return "供应商模型或接口不存在：请检查 Base URL 与模型名";

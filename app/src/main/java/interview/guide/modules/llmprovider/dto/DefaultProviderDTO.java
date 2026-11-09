@@ -1,10 +1,6 @@
 package interview.guide.modules.llmprovider.dto;
 
 public record DefaultProviderDTO(
-    String defaultProvider,
-    String defaultEmbeddingProvider
+    String defaultProvider
 ) {
-    public DefaultProviderDTO(String defaultProvider) {
-        this(defaultProvider, null);
-    }
 }

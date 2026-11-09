@@ -116,16 +116,9 @@ public class InterviewSessionEntity {
     @Column(length = 50)
     private String llmProvider = "dashscope";
 
-    // 会话来源：NORMAL / KNOWLEDGE_BASE
+    // 会话来源：NORMAL
     @Column(length = 32)
     private String sourceType = "NORMAL";
-
-    // 知识库面试来源知识库 ID
-    private Long knowledgeBaseId;
-
-    // 知识库面试方向（来自题库 category，普通面试为 null）
-    @Column(length = 64)
-    private String interviewCategory;
     
     public enum SessionStatus {
         CREATED,      // 会话已创建
@@ -326,22 +319,6 @@ public class InterviewSessionEntity {
 
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
-    }
-
-    public Long getKnowledgeBaseId() {
-        return knowledgeBaseId;
-    }
-
-    public void setKnowledgeBaseId(Long knowledgeBaseId) {
-        this.knowledgeBaseId = knowledgeBaseId;
-    }
-
-    public String getInterviewCategory() {
-        return interviewCategory;
-    }
-
-    public void setInterviewCategory(String interviewCategory) {
-        this.interviewCategory = interviewCategory;
     }
 
     public void addAnswer(InterviewAnswerEntity answer) {

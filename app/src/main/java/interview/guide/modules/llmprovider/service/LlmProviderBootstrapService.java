@@ -46,8 +46,6 @@ public class LlmProviderBootstrapService {
       }
       ApiKeyEncryptionService.EncryptedValue encrypted =
           encryptionService.encrypt(config.getApiKey() != null ? config.getApiKey() : "");
-      boolean supportsEmbedding = Boolean.TRUE.equals(config.getSupportsEmbedding())
-          || !isBlank(config.getEmbeddingModel());
 
       LlmProviderEntity entity = LlmProviderEntity.builder()
           .id(id)
@@ -55,9 +53,6 @@ public class LlmProviderBootstrapService {
           .apiKeyNonce(encrypted.nonce())
           .apiKeyCiphertext(encrypted.ciphertext())
           .model(config.getModel())
-          .embeddingModel(trimOrNull(config.getEmbeddingModel()))
-          .embeddingDimensions(resolveEmbeddingDimensions(config.getEmbeddingDimensions()))
-          .supportsEmbedding(supportsEmbedding)
           .temperature(config.getTemperature())
           .enabled(true)
           .builtin(true)
@@ -75,18 +70,12 @@ public class LlmProviderBootstrapService {
         properties.getDefaultProvider(),
         providerRepository.findAll().stream().findFirst().map(LlmProviderEntity::getId).orElse("dashscope")
     );
-    String configuredEmbeddingProvider = !isBlank(properties.getDefaultEmbeddingProvider())
-        ? properties.getDefaultEmbeddingProvider()
-        : defaultChatProvider;
-    String defaultEmbeddingProvider = resolveExistingEmbeddingProvider(configuredEmbeddingProvider, defaultChatProvider);
 
     globalSettingRepository.save(LlmGlobalSettingEntity.builder()
         .id(LlmGlobalSettingEntity.SINGLETON_ID)
         .defaultChatProviderId(defaultChatProvider)
-        .defaultEmbeddingProviderId(defaultEmbeddingProvider)
         .build());
-    log.info("Initialized LLM global setting: chatProvider={}, embeddingProvider={}",
-        defaultChatProvider, defaultEmbeddingProvider);
+    log.info("Initialized LLM global setting: chatProvider={}", defaultChatProvider);
   }
 
   private String resolveExistingProvider(String preferredProvider, String fallbackProvider) {
@@ -94,38 +83,6 @@ public class LlmProviderBootstrapService {
       return preferredProvider;
     }
     return fallbackProvider;
-  }
-
-  private String resolveExistingEmbeddingProvider(String preferredProvider, String fallbackProvider) {
-    return providerRepository.findById(preferredProvider)
-        .filter(this::canProvideEmbedding)
-        .map(LlmProviderEntity::getId)
-        .orElseGet(() -> providerRepository.findAll().stream()
-            .filter(this::canProvideEmbedding)
-            .findFirst()
-            .map(LlmProviderEntity::getId)
-            .orElse(fallbackProvider));
-  }
-
-  private boolean canProvideEmbedding(LlmProviderEntity provider) {
-    return provider.isEnabled()
-        && provider.isSupportsEmbedding()
-        && !isBlank(provider.getEmbeddingModel());
-  }
-
-  private Integer resolveEmbeddingDimensions(Integer configuredDimensions) {
-    if (configuredDimensions != null && configuredDimensions > 0) {
-      return configuredDimensions;
-    }
-    return properties.getEmbeddingDimensions();
-  }
-
-  private String trimOrNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
   }
 
   private boolean isBlank(String value) {

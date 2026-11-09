@@ -7,7 +7,7 @@
 - `V1__init_schema.sql` 负责空库初始化。
 - 后续 `V*.sql` 负责增量变更，必须保持幂等或可安全回放到对应版本状态。
 - Hibernate `ddl-auto` 使用 `validate`，只校验 schema，不负责建表或改表。
-- Spring AI pgvector 表结构也由 Flyway 创建，`initialize-schema` 应保持 `false`。
+- 历史迁移中的 `vector_store` 已由 `V20261109_01` 删除，`embedding_*` 列已由 `V20261109_02` 删除；保留 `pgvector` 镜像仅为空库回放历史迁移中的 `CREATE EXTENSION vector`。
 - 测试环境使用 H2 + `ddl-auto: create-drop`，默认关闭 Flyway。
 
 不要用 `psql` 直接执行本目录迁移脚本，否则 Flyway 无法记录执行历史，后续启动可能出现版本状态不一致。

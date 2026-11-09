@@ -85,10 +85,6 @@ public class UserLlmCredentialEntity {
     @Column(name = "chat_enabled", nullable = false)
     private Boolean chatEnabled = Boolean.TRUE;
 
-    /** 该凭证是否可用于 Embedding（知识库向量化与检索）。 */
-    @Column(name = "embedding_enabled", nullable = false)
-    private Boolean embeddingEnabled = Boolean.FALSE;
-
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

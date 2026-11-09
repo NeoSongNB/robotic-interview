@@ -2,7 +2,7 @@ package interview.guide.common.constant;
 
 /**
  * 异步任务 Redis Stream 通用常量
- * 包含知识库向量化和简历分析两个异步任务的配置
+ * 包含简历分析、面试评估与语音面试评估等异步任务的配置
  */
 public final class AsyncTaskStreamConstants {
 
@@ -48,28 +48,6 @@ public final class AsyncTaskStreamConstants {
      * Stream 最大长度（自动裁剪旧消息，防止无限增长）
      */
     public static final int STREAM_MAX_LEN = 1000;
-
-    // ========== 知识库向量化 Stream 配置 ==========
-
-    /**
-     * 知识库向量化 Stream Key
-     */
-    public static final String KB_VECTORIZE_STREAM_KEY = "knowledgebase:vectorize:stream";
-
-    /**
-     * 知识库向量化 Consumer Group 名称
-     */
-    public static final String KB_VECTORIZE_GROUP_NAME = "vectorize-group";
-
-    /**
-     * 知识库向量化 Consumer 名称前缀
-     */
-    public static final String KB_VECTORIZE_CONSUMER_PREFIX = "vectorize-consumer-";
-
-    /**
-     * 知识库ID字段
-     */
-    public static final String FIELD_KB_ID = "kbId";
 
     // ========== 简历分析 Stream 配置 ==========
 
@@ -136,51 +114,4 @@ public final class AsyncTaskStreamConstants {
      * 语音面试会话ID字段
      */
     public static final String FIELD_VOICE_SESSION_ID = "voiceSessionId";
-
-    // ========== 知识库问题生成 Stream 配置 ==========
-
-    /**
-     * 知识库问题生成 Stream Key
-     */
-    public static final String KB_QUESTION_GEN_STREAM_KEY = "knowledgebase:question-gen:stream";
-
-    /**
-     * 知识库问题生成 Consumer Group 名称
-     */
-    public static final String KB_QUESTION_GEN_GROUP_NAME = "question-gen-group";
-
-    /**
-     * 知识库问题生成 Consumer 名称前缀
-     */
-    public static final String KB_QUESTION_GEN_CONSUMER_PREFIX = "question-gen-consumer-";
-
-    /**
-     * 任务ID字段（用于幂等判断）
-     */
-    public static final String FIELD_TASK_ID = "taskId";
-
-    /**
-     * 难度字段
-     */
-    public static final String FIELD_DIFFICULTY = "difficulty";
-
-    /**
-     * 题目数量字段
-     */
-    public static final String FIELD_QUESTION_COUNT = "questionCount";
-
-    /**
-     * 追问数量字段
-     */
-    public static final String FIELD_FOLLOW_UP_COUNT = "followUpCount";
-
-    /**
-     * 方向数量字段
-     */
-    public static final String FIELD_CATEGORY_LIMIT = "categoryLimit";
-
-    /**
-     * LLM Provider字段
-     */
-    public static final String FIELD_LLM_PROVIDER = "llmProvider";
 }

@@ -38,26 +38,8 @@ class InterviewPersistenceServiceTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Test
-  @DisplayName("知识库面试保存时写入 interviewCategory")
-  void shouldSaveInterviewCategoryForKnowledgeBaseSession() {
-    InterviewPersistenceService service = newService();
-    when(sessionRepository.save(any(InterviewSessionEntity.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
-
-    service.saveSession("sid1", null, 1, List.of(), "dashscope",
-        "knowledge-base", "mid", "KNOWLEDGE_BASE", 9L, "MySQL");
-
-    ArgumentCaptor<InterviewSessionEntity> captor = ArgumentCaptor.forClass(InterviewSessionEntity.class);
-    verify(sessionRepository).save(captor.capture());
-    InterviewSessionEntity saved = captor.getValue();
-    assertThat(saved.getInterviewCategory()).isEqualTo("MySQL");
-    assertThat(saved.getKnowledgeBaseId()).isEqualTo(9L);
-    assertThat(saved.getSourceType()).isEqualTo("KNOWLEDGE_BASE");
-  }
-
-  @Test
-  @DisplayName("普通面试保存时 interviewCategory 保持 null")
-  void shouldKeepInterviewCategoryNullForNormalSession() {
+  @DisplayName("普通面试保存时来源类型为 NORMAL")
+  void shouldSaveNormalSession() {
     InterviewPersistenceService service = newService();
     when(sessionRepository.save(any(InterviewSessionEntity.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
@@ -67,9 +49,8 @@ class InterviewPersistenceServiceTest {
     ArgumentCaptor<InterviewSessionEntity> captor = ArgumentCaptor.forClass(InterviewSessionEntity.class);
     verify(sessionRepository).save(captor.capture());
     InterviewSessionEntity saved = captor.getValue();
-    assertThat(saved.getInterviewCategory()).isNull();
     assertThat(saved.getSourceType()).isEqualTo("NORMAL");
-    assertThat(saved.getKnowledgeBaseId()).isNull();
+    assertThat(saved.getSessionId()).isEqualTo("sid2");
   }
 
   private InterviewPersistenceService newService() {

@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  *       {@link CurrentUserProvider} 从认证上下文提供；异步任务由业务资源的所有者提供。</li>
  *   <li>只对「当前用户 + 供应商」这一组合做读写，天然阻断越权。</li>
  *   <li>返回值永远是 {@link UserCredentialDTO}（不含明文/密文）。</li>
- *   <li>明文 API Key 仅在 {@link #openSecret} 中短暂出现，不写日志、不入缓存 Key、不进消息队列。</li>
+ *   <li>明文 API Key 仅在 {@link #openChatSecret} 中短暂出现，不写日志、不入缓存 Key、不进消息队列。</li>
  *   <li><b>不存在平台全局 Key 回退</b>：用户没有可用凭证时直接抛出配置错误。</li>
  * </ul>
  */
@@ -52,9 +52,6 @@ public class UserCredentialService {
     private static final int KEY_TAIL_LENGTH = 4;
     /** 语音能力（ASR/TTS）固定绑定 DashScope。 */
     private static final String SPEECH_PROVIDER = "dashscope";
-    /** 第一版固定 Embedding 维度，禁止用户修改，也禁止不同维度写入 vector(1024)。 */
-    private static final int FIXED_EMBEDDING_DIMENSIONS = 1024;
-    private static final String FALLBACK_EMBEDDING_MODEL = "text-embedding-v3";
 
     private final UserLlmCredentialRepository repository;
     private final ApiKeyEncryptionService encryptionService;
@@ -93,24 +90,22 @@ public class UserCredentialService {
     }
 
     /**
-     * 用户是否存在任意一种可用凭证（Chat 或 Embedding）。
+     * 用户是否存在可用的 Chat 凭证。
      *
      * <p>用于闸门的前置判断：只有"完全没有配置"才提前拒绝，
      * 具体缺少哪种能力由业务服务返回更精确的错误码。</p>
      */
     @Transactional(readOnly = true)
     public boolean hasAnyUsableCredential(Long userId) {
-        return resolveChatCredential(userId, null).isPresent()
-            || resolveEmbeddingCredential(userId).isPresent();
+        return resolveChatCredential(userId, null).isPresent();
     }
 
     /**
-     * 当前用户 AI 能力就绪状态（Chat / Embedding / 语音）。
+     * 当前用户 AI 能力就绪状态（Chat / 语音）。
      */
     @Transactional(readOnly = true)
     public CredentialStatusDTO status(Long userId) {
         Optional<UserLlmCredentialEntity> chat = resolveChatCredential(userId, null);
-        Optional<UserLlmCredentialEntity> embedding = resolveEmbeddingCredential(userId);
         boolean speechReady = repository.findByUserIdAndProviderKey(userId, SPEECH_PROVIDER)
             .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
             .isPresent();
@@ -118,10 +113,6 @@ public class UserCredentialService {
             chat.isPresent(),
             chat.map(UserLlmCredentialEntity::getProviderKey).orElse(null),
             chat.map(UserLlmCredentialEntity::getModelName).orElse(null),
-            embedding.isPresent(),
-            embedding.map(UserLlmCredentialEntity::getProviderKey).orElse(null),
-            embedding.map(this::embeddingModelOf).orElse(null),
-            FIXED_EMBEDDING_DIMENSIONS,
             speechReady,
             speechReady ? SPEECH_PROVIDER : null
         );
@@ -163,14 +154,13 @@ public class UserCredentialService {
         entity.setKeyTail(extractKeyTail(apiKey));
         entity.setStatus(CredentialStatus.ACTIVE.name());
         entity.setChatEnabled(Boolean.TRUE);
-        entity.setEmbeddingEnabled(supportsEmbedding(providerKey));
         entity.setCredentialVersion(
             (entity.getCredentialVersion() == null ? 0L : entity.getCredentialVersion()) + 1);
 
         UserLlmCredentialEntity saved = repository.save(entity);
         // 只记录非敏感元数据：用户、供应商、模型。绝不记录 Key 或密文。
-        log.info("用户 AI 凭证已保存: userId={}, providerKey={}, model={}, credentialVersion={}, embeddingEnabled={}",
-            userId, providerKey, modelName, saved.getCredentialVersion(), saved.getEmbeddingEnabled());
+        log.info("用户 AI 凭证已保存: userId={}, providerKey={}, model={}, credentialVersion={}",
+            userId, providerKey, modelName, saved.getCredentialVersion());
         publishChanged(userId, providerKey);
         return toDto(saved);
     }
@@ -234,26 +224,6 @@ public class UserCredentialService {
     }
 
     /**
-     * 解析指定用户的 Embedding 模型上下文（第一版固定模型与 1024 维）。
-     *
-     * @throws BusinessException 用户未配置 Embedding 凭证时抛出 {@code EMBEDDING_CREDENTIAL_NOT_CONFIGURED}
-     */
-    @Transactional(readOnly = true)
-    public AiExecutionContext embeddingContextForUser(Long userId) {
-        UserLlmCredentialEntity entity = resolveEmbeddingCredential(userId)
-            .orElseThrow(() -> new BusinessException(ErrorCode.EMBEDDING_CREDENTIAL_NOT_CONFIGURED));
-        return embeddingContext(entity);
-    }
-
-    /**
-     * 同步请求：从 SecurityContext 获取用户，解析其 Embedding 模型上下文。
-     */
-    @Transactional(readOnly = true)
-    public AiExecutionContext requireEmbeddingContext() {
-        return embeddingContextForUser(currentUserProvider.requireUserId());
-    }
-
-    /**
      * 解密用户 Chat 凭证，仅供 {@code LlmProviderRegistry} 在缓存未命中时构造客户端。
      *
      * <p>返回对象只在方法调用点短暂存在，调用方不得写日志、缓存、消息队列或工作流状态。</p>
@@ -268,24 +238,6 @@ public class UserCredentialService {
             entity.getProviderKey(),
             presetRegistry.requireBaseUrl(entity.getProviderKey()),
             entity.getModelName(),
-            decrypt(entity),
-            entity.getCredentialVersion()
-        );
-    }
-
-    /**
-     * 解密用户 Embedding 凭证（模型名称与维度由平台固定，用户不可改）。
-     */
-    @Transactional(readOnly = true)
-    public ProviderSecret openEmbeddingSecret(Long userId, String providerKey) {
-        UserLlmCredentialEntity entity = loadActive(userId, providerKey);
-        if (!Boolean.TRUE.equals(entity.getEmbeddingEnabled())) {
-            throw new BusinessException(ErrorCode.EMBEDDING_CREDENTIAL_NOT_CONFIGURED);
-        }
-        return new ProviderSecret(
-            entity.getProviderKey(),
-            presetRegistry.requireBaseUrl(entity.getProviderKey()),
-            embeddingModelOf(entity),
             decrypt(entity),
             entity.getCredentialVersion()
         );
@@ -366,71 +318,12 @@ public class UserCredentialService {
             .filter(entity -> Boolean.TRUE.equals(entity.getChatEnabled()));
     }
 
-    /**
-     * Embedding 凭证选择顺序：平台默认 Embedding 供应商 → 最近更新的可用 Embedding 凭证。
-     */
-    private Optional<UserLlmCredentialEntity> resolveEmbeddingCredential(Long userId) {
-        String defaultEmbedding = llmProviderProperties.getDefaultEmbeddingProvider();
-        if (defaultEmbedding != null && !defaultEmbedding.isBlank()) {
-            Optional<UserLlmCredentialEntity> byDefault = repository
-                .findByUserIdAndProviderKey(userId, normalizeProviderKey(defaultEmbedding))
-                .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-                .filter(entity -> Boolean.TRUE.equals(entity.getEmbeddingEnabled()));
-            if (byDefault.isPresent()) {
-                return byDefault;
-            }
-        }
-        return repository.findByUserIdAndEmbeddingEnabledTrueOrderByUpdatedAtDesc(userId).stream()
-            .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-            .filter(entity -> byokProperties.getEmbeddingProviders() == null
-                || byokProperties.getEmbeddingProviders().stream()
-                    .map(this::normalizeProviderKey)
-                    .anyMatch(key -> key.equals(entity.getProviderKey())))
-            .findFirst();
-    }
-
     private AiExecutionContext toContext(UserLlmCredentialEntity entity) {
         return new AiExecutionContext(
             entity.getUserId(),
             entity.getProviderKey(),
             entity.getModelName(),
             entity.getCredentialVersion() == null ? 0L : entity.getCredentialVersion());
-    }
-
-    private AiExecutionContext embeddingContext(UserLlmCredentialEntity entity) {
-        return new AiExecutionContext(
-            entity.getUserId(),
-            entity.getProviderKey(),
-            embeddingModelOf(entity),
-            entity.getCredentialVersion() == null ? 0L : entity.getCredentialVersion());
-    }
-
-    private String embeddingModelOf(UserLlmCredentialEntity entity) {
-        LlmProviderProperties.ProviderConfig config = providerConfig(entity.getProviderKey());
-        String configured = config == null ? null : config.getEmbeddingModel();
-        return configured == null || configured.isBlank() ? FALLBACK_EMBEDDING_MODEL : configured.trim();
-    }
-
-    private LlmProviderProperties.ProviderConfig providerConfig(String providerKey) {
-        var providers = llmProviderProperties.getProviders();
-        if (providers == null) {
-            return null;
-        }
-        return providers.get(normalizeProviderKey(providerKey));
-    }
-
-    private boolean supportsEmbedding(String providerKey) {
-        LlmProviderProperties.ProviderConfig config = providerConfig(providerKey);
-        if (config == null) {
-            return false;
-        }
-        boolean allowedByPlatform = byokProperties.getEmbeddingProviders() != null
-            && byokProperties.getEmbeddingProviders().stream()
-                .map(this::normalizeProviderKey)
-                .anyMatch(normalizeProviderKey(providerKey)::equals);
-        boolean platformClaims = Boolean.TRUE.equals(config.getSupportsEmbedding())
-            || (config.getEmbeddingModel() != null && !config.getEmbeddingModel().isBlank());
-        return allowedByPlatform && platformClaims;
     }
 
     private UserLlmCredentialEntity loadActive(Long userId, String providerKey) {
@@ -463,8 +356,7 @@ public class UserCredentialService {
             entity.getModelName(),
             entity.getKeyTail(),
             entity.getUpdatedAt(),
-            configured && Boolean.TRUE.equals(entity.getChatEnabled()),
-            configured && Boolean.TRUE.equals(entity.getEmbeddingEnabled())
+            configured && Boolean.TRUE.equals(entity.getChatEnabled())
         );
     }
 

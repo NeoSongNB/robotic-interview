@@ -19,8 +19,6 @@ public record SessionListItemDTO(
     String evaluateError,
     Integer overallScore,
     String sourceType,
-    Long knowledgeBaseId,
-    String interviewCategory,
     LocalDateTime createdAt,
     LocalDateTime completedAt
 ) {
@@ -36,8 +34,6 @@ public record SessionListItemDTO(
             e.getEvaluateError(),
             e.getOverallScore(),
             e.getSourceType(),
-            e.getKnowledgeBaseId(),
-            e.getInterviewCategory(),
             e.getCreatedAt(),
             e.getCompletedAt()
         );

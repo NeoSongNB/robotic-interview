@@ -3,15 +3,13 @@ import { Button, Card, EmptyState } from '../components/ui';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
-import {CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis} from 'recharts';
 import {historyApi} from '../api/history';
 import {interviewApi, type TextSessionMeta} from '../api/interview';
 import {voiceInterviewApi, SessionMeta} from '../api/voiceInterview';
-import {formatDate, formatDateOnly} from '../utils/date';
+import {formatDate} from '../utils/date';
 import {getScoreProgressColor} from '../utils/score';
 import {
   calculateInterviewStats,
-  getKnowledgeBaseInterviewCategoryLabel,
   isCompletedStatus,
   isEvaluateCompleted,
 } from './interviewHistoryStats.ts';
@@ -29,43 +27,22 @@ import {
   Clock,
   Download,
   FileText,
-  Filter,
   Loader2,
   Mic,
   PlayCircle,
   RefreshCw,
   RotateCcw,
   Search,
-  Tag,
   Trash2,
   TrendingUp,
   Users,
 } from 'lucide-react';
 
 type InterviewType = 'all' | 'text' | 'voice';
-type TimeRange = 'all' | '7d' | '30d' | '90d';
-type CompletionFilter = 'all' | 'inProgress' | 'completed';
-
-const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
-  { value: 'all', label: '全部时间' },
-  { value: '7d', label: '最近 7 天' },
-  { value: '30d', label: '最近 30 天' },
-  { value: '90d', label: '最近 90 天' },
-];
-
-const COMPLETION_OPTIONS: { value: CompletionFilter; label: string }[] = [
-  { value: 'all', label: '全部状态' },
-  { value: 'inProgress', label: '进行中' },
-  { value: 'completed', label: '已完成' },
-];
-
-const ALL_DIRECTIONS_LABEL = '全部方向';
-const ALL_DIRECTIONS_VALUE = '__all_directions__';
 
 interface UnifiedInterviewItem {
   id: string;
   type: 'text' | 'voice';
-  sourceType?: string | null;
   title: string;
   sessionId: string;
   status: string;
@@ -77,8 +54,6 @@ interface UnifiedInterviewItem {
   actualDuration?: number;
   createdAt: string;
   resumeId?: number;
-  knowledgeBaseId?: number;
-  interviewCategory?: string | null;
   voiceSessionId?: number;
 }
 
@@ -173,14 +148,6 @@ function StatCard({
 }
 
 function TypeBadge({ item }: { item: UnifiedInterviewItem }) {
-  if (item.sourceType === 'KNOWLEDGE_BASE') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-medium">
-        <FileText className="w-3 h-3" />
-        知识库
-      </span>
-    );
-  }
   if (item.type === 'voice') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-medium">
@@ -202,7 +169,6 @@ interface InterviewHistoryPageProps {
   onViewInterview: (sessionId: string, resumeId?: number) => void;
   onRestartInterview?: (resumeId: number) => void;
   onContinueInterview?: (sessionId: string) => void;
-  knowledgeBaseId?: number;
 }
 
 /** Shallow comparison for polling change-detection */
@@ -223,18 +189,12 @@ export default function InterviewHistoryPage({
   onViewInterview,
   onRestartInterview,
   onContinueInterview,
-  knowledgeBaseId,
 }: InterviewHistoryPageProps) {
   const navigate = useNavigate();
-  const knowledgeBaseFilterId = knowledgeBaseId ?? null;
-  const isKnowledgeBaseView = knowledgeBaseFilterId !== null && !Number.isNaN(knowledgeBaseFilterId);
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<InterviewType>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [timeFilter, setTimeFilter] = useState<TimeRange>('all');
-  const [completionFilter, setCompletionFilter] = useState<CompletionFilter>('all');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [deleteItem, setDeleteItem] = useState<UnifiedInterviewItem | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -242,14 +202,6 @@ export default function InterviewHistoryPage({
   const pollingRef = useRef<number | null>(null);
   const skillsRef = useRef<SkillDTO[]>([]);
   const skillsLoadedRef = useRef(false);
-
-  const hasActiveKbFilters = categoryFilter !== 'all' || timeFilter !== 'all' || completionFilter !== 'all';
-
-  const resetKbFilters = () => {
-    setCategoryFilter('all');
-    setTimeFilter('all');
-    setCompletionFilter('all');
-  };
 
   const loadAll = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
@@ -262,17 +214,14 @@ export default function InterviewHistoryPage({
       }
       const loadedSkills = skillsRef.current;
       const textInterviews = await loadTextInterviews(loadedSkills);
-      const scopedTextInterviews = isKnowledgeBaseView
-        ? textInterviews.filter(item => item.knowledgeBaseId === knowledgeBaseFilterId)
-        : textInterviews.filter(item => item.sourceType !== 'KNOWLEDGE_BASE');
-      const voiceSessions = isKnowledgeBaseView ? [] : await loadVoiceInterviews();
+      const voiceSessions = await loadVoiceInterviews();
 
       const voiceWithNames = voiceSessions.map(item => {
         const skillName = getTemplateName(item.title, loadedSkills);
         return skillName !== item.title ? { ...item, title: skillName } : item;
       });
 
-      const all = [...scopedTextInterviews, ...voiceWithNames];
+      const all = [...textInterviews, ...voiceWithNames];
       all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       setItems(prev => {
@@ -286,30 +235,27 @@ export default function InterviewHistoryPage({
     } finally {
       if (!isPolling) setLoading(false);
     }
-  }, [isKnowledgeBaseView, knowledgeBaseFilterId]);
+  }, []);
 
   // Load text interviews from dedicated API
   async function loadTextInterviews(skills: SkillDTO[]): Promise<UnifiedInterviewItem[]> {
     try {
       const sessions = await interviewApi.listSessions();
-      return sessions.map((session: TextSessionMeta) => ({
-        id: session.sessionId,
-        type: 'text' as const,
-        sourceType: session.sourceType,
-        title: session.sourceType === 'KNOWLEDGE_BASE'
-          ? `${getTemplateName(session.skillId, skills)} · 知识库面试`
-          : getTemplateName(session.skillId, skills),
-        sessionId: session.sessionId,
-        status: session.status,
-        evaluateStatus: session.evaluateStatus ?? undefined,
-        evaluateError: session.evaluateError ?? undefined,
-        overallScore: session.overallScore,
-        totalQuestions: session.totalQuestions,
-        createdAt: session.createdAt,
-        resumeId: session.resumeId ?? undefined,
-        knowledgeBaseId: session.knowledgeBaseId ?? undefined,
-        interviewCategory: session.interviewCategory ?? null,
-      }));
+      return sessions
+        .filter((session: TextSessionMeta) => session.sourceType !== 'KNOWLEDGE_BASE')
+        .map((session: TextSessionMeta) => ({
+          id: session.sessionId,
+          type: 'text' as const,
+          title: getTemplateName(session.skillId, skills),
+          sessionId: session.sessionId,
+          status: session.status,
+          evaluateStatus: session.evaluateStatus ?? undefined,
+          evaluateError: session.evaluateError ?? undefined,
+          overallScore: session.overallScore,
+          totalQuestions: session.totalQuestions,
+          createdAt: session.createdAt,
+          resumeId: session.resumeId ?? undefined,
+        }));
     } catch {
       return [];
     }
@@ -435,64 +381,14 @@ export default function InterviewHistoryPage({
     }
   };
 
-  // Filter + search（知识库视图额外支持方向 / 时间范围 / 完成状态筛选，条件之间为 AND 关系）
+  // Filter + search
   const filtered = useMemo(() => items.filter(item => {
     if (typeFilter !== 'all' && item.type !== typeFilter) return false;
     if (searchTerm && !item.title.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-    if (isKnowledgeBaseView) {
-      if (categoryFilter === ALL_DIRECTIONS_VALUE && item.interviewCategory) return false;
-      if (categoryFilter !== 'all'
-          && categoryFilter !== ALL_DIRECTIONS_VALUE
-          && item.interviewCategory !== categoryFilter) return false;
-      if (timeFilter !== 'all') {
-        const days = timeFilter === '7d' ? 7 : timeFilter === '30d' ? 30 : 90;
-        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-        if (new Date(item.createdAt).getTime() < cutoff) return false;
-      }
-      if (completionFilter !== 'all') {
-        const completed = isEvaluateCompleted(item);
-        if (completionFilter === 'completed' && !completed) return false;
-        if (completionFilter === 'inProgress' && completed) return false;
-      }
-    }
     return true;
-  }), [items, typeFilter, searchTerm, isKnowledgeBaseView, categoryFilter, timeFilter, completionFilter]);
+  }), [items, typeFilter, searchTerm]);
 
-  const categoryOptions = useMemo(() => {
-    const values = new Set<string>();
-    let hasUncategorized = false;
-    items.forEach(item => {
-      if (item.interviewCategory) {
-        values.add(item.interviewCategory);
-      } else {
-        hasUncategorized = true;
-      }
-    });
-    return {
-      values: Array.from(values).sort((a, b) => a.localeCompare(b, 'zh-CN')),
-      hasUncategorized,
-    };
-  }, [items]);
-
-  // 统计数据基于筛选后的记录，保证与列表一致
-  const stats = useMemo(
-    () => calculateInterviewStats(items, filtered, isKnowledgeBaseView),
-    [items, filtered, isKnowledgeBaseView],
-  );
-
-  const trendData = useMemo(() => {
-    return filtered
-      .filter(item => isEvaluateCompleted(item) && item.overallScore !== null)
-      .map(item => ({
-        name: formatDateOnly(item.createdAt),
-        score: item.overallScore || 0,
-      }))
-      .reverse();
-  }, [filtered]);
-
-  // 筛选无结果（仅知识库视图且存在生效筛选条件时）与原始空状态区分开
-  const showFilterEmpty = isKnowledgeBaseView && hasActiveKbFilters && items.length > 0 && filtered.length === 0;
-  const showOriginalEmpty = filtered.length === 0 && !showFilterEmpty;
+  const stats = useMemo(() => calculateInterviewStats(items), [items]);
 
   return (
     <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -505,7 +401,7 @@ export default function InterviewHistoryPage({
             animate={{ opacity: 1, x: 0 }}
           >
             <Users className="w-7 h-7 text-primary-500 dark:drop-shadow-[0_0_10px_rgb(var(--skin-accent)/0.8)]" />
-            {isKnowledgeBaseView ? '知识库面试记录' : '面试记录'}
+            面试记录
           </motion.h1>
           <motion.p
             className="text-slate-500 dark:text-slate-400 mt-1"
@@ -513,7 +409,7 @@ export default function InterviewHistoryPage({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            {isKnowledgeBaseView ? '查看当前知识库的面试记录和表现趋势' : '查看和管理所有模拟面试记录'}
+            查看和管理所有模拟面试记录
           </motion.p>
         </div>
 
@@ -542,96 +438,8 @@ export default function InterviewHistoryPage({
         </div>
       )}
 
-      {isKnowledgeBaseView && trendData.length > 0 && (
-        <motion.div
-          className="dark-card p-6 mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary-500 dark:text-neon-cyan dark:drop-shadow-[0_0_8px_rgb(var(--skin-accent-3)/0.7)]" />
-              <span className="font-semibold text-slate-800 dark:text-white">面试表现趋势</span>
-            </div>
-            <span className="text-sm text-slate-500 dark:text-slate-400">共 {trendData.length} 场练习</span>
-          </div>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" className="dark:stroke-slate-700" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <Tooltip formatter={(value) => [`${value} 分`, '得分']} />
-                <Line
-                  type="monotone"
-                  dataKey="score"
-                  stroke="rgb(var(--skin-accent))"
-                  strokeWidth={3}
-                  dot={{ fill: 'rgb(var(--skin-accent-3))', strokeWidth: 2, r: 5 }}
-                  activeDot={{ r: 8, fill: 'rgb(var(--skin-accent-3))' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-      )}
-
-      {/* 知识库面试记录筛选（仅知识库视图显示） */}
-      {isKnowledgeBaseView && (
-        <motion.div
-          className="flex items-center gap-3 flex-wrap dark-card rounded-xl px-4 py-3 mb-6"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            aria-label="按面试方向筛选"
-            className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-primary-500 transition-colors cursor-pointer"
-          >
-            <option value="all">全部记录</option>
-            {categoryOptions.values.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-            {categoryOptions.hasUncategorized && (
-              <option value={ALL_DIRECTIONS_VALUE}>{ALL_DIRECTIONS_LABEL}</option>
-            )}
-          </select>
-          <select
-            value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value as TimeRange)}
-            aria-label="按时间范围筛选"
-            className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-primary-500 transition-colors cursor-pointer"
-          >
-            {TIME_RANGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <select
-            value={completionFilter}
-            onChange={(e) => setCompletionFilter(e.target.value as CompletionFilter)}
-            aria-label="按完成状态筛选"
-            className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-primary-500 transition-colors cursor-pointer"
-          >
-            {COMPLETION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          {hasActiveKbFilters && (
-            <button
-              onClick={resetKbFilters}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-primary-500 dark:hover:text-primary-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              重置筛选
-            </button>
-          )}
-        </motion.div>
-      )}
-
       {/* Type filter tabs */}
-      {!isKnowledgeBaseView && <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-6">
         {([
           { key: 'all', label: '全部' },
           { key: 'text', label: '文字面试' },
@@ -649,7 +457,7 @@ export default function InterviewHistoryPage({
             {tab.label}
           </button>
         ))}
-      </div>}
+      </div>
 
       {/* Loading */}
       {loading && (
@@ -658,33 +466,13 @@ export default function InterviewHistoryPage({
         </div>
       )}
 
-      {/* 筛选无结果（知识库视图且筛选条件生效） */}
-      {!loading && showFilterEmpty && (
-        <motion.div
-          className="dark-card text-center py-20"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <Search className="w-16 h-16 text-slate-300 dark:text-slate-500 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-200 mb-2">没有符合当前筛选条件的面试记录</h3>
-          <p className="text-slate-500 dark:text-slate-400 mb-6">可以尝试调整面试方向、时间范围或完成状态</p>
-          <button
-            onClick={resetKbFilters}
-            className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm rounded-lg"
-          >
-            <RotateCcw className="w-4 h-4" />
-            重置筛选
-          </button>
-        </motion.div>
-      )}
-
       {/* Empty */}
-      {!loading && showOriginalEmpty && (
+      {!loading && filtered.length === 0 && (
         <Card>
           <EmptyState
             icon={<Users className="h-8 w-8" />}
             title="暂无面试记录"
-            description={isKnowledgeBaseView ? '开始一次知识库面试后，记录将显示在这里' : '开始一次模拟面试后，记录将显示在这里'}
+            description="开始一次模拟面试后，记录将显示在这里"
             action={
               <Button onClick={() => navigate('/interview-hub')}>
                 去面试中心
@@ -738,15 +526,6 @@ export default function InterviewHistoryPage({
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-slate-800 dark:text-white">{item.title}</p>
-                            {isKnowledgeBaseView && item.type === 'text' && (
-                              <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded text-xs font-medium"
-                                title="面试方向"
-                              >
-                                <Tag className="w-3 h-3" />
-                                {getKnowledgeBaseInterviewCategoryLabel(item.interviewCategory)}
-                              </span>
-                            )}
                           </div>
                           <p className="text-xs text-slate-400 dark:text-slate-500">#{item.id.slice(-8)}</p>
                         </div>
@@ -803,13 +582,7 @@ export default function InterviewHistoryPage({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (item.sourceType === 'KNOWLEDGE_BASE') {
-                                navigate(`/knowledgebase-interview/${item.sessionId}`, {
-                                  state: { knowledgeBaseId: item.knowledgeBaseId },
-                                });
-                              } else {
-                                onContinueInterview(item.sessionId);
-                              }
+                              onContinueInterview(item.sessionId);
                             }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="继续面试"

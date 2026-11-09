@@ -238,7 +238,7 @@ export default function Interview({
               onClick={() => {
                 // 重试应按入口类型走对应路径：恢复失败必须重试恢复，
                 // 否则会用 resumeText="" 创建一个新的默认 java-backend 普通面试，
-                // 知识库面试场景下会让用户从错误页面突然跳进无关会话
+                // 异常场景下会让用户从错误页面突然跳进无关会话
                 const entry = resolveInterviewEntry(sessionIdToResume);
                 if (entry.type === 'resume') {
                   resumeExistingSession(entry.sessionId);

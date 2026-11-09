@@ -62,7 +62,7 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: 50MB  # 支持知识库上传（简历限制在业务层检查）
+      max-file-size: 50MB  # 支持文件上传（简历限制在业务层检查）
       max-request-size: 50MB
   
 
@@ -78,20 +78,12 @@ spring:
           subscriptionConnectionMinimumIdleSize: 1
           subscriptionConnectionPoolSize: 50
   
-  # Spring AI 配置（chat + embedding 统一由 app.ai.providers 驱动，不使用自动配置）
+  # Spring AI 配置（chat 统一由 app.ai.providers 驱动，不使用自动配置）
   ai:
     # 禁用自动重试机制，让异常立即返回
     retry:
       max-attempts: 1  # 不重试，失败立即返回
       on-client-errors: false
-    # PostgreSQL Vector Store配置
-    vectorstore:
-      pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024  # text-embedding-v3实际生成的向量维度
-        initialize-schema: false # schema 统一由 Flyway 管理
-        remove-existing-vector-store-table: false  # 保留现有表和数据
 
 # Application custom configuration
 app:
@@ -120,8 +112,6 @@ app:
       email: ${APP_AUTH_ADMIN_EMAIL:}
   ai:
     default-provider: dashscope
-    default-embedding-provider: dashscope
-    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
     security:
       api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}
       require-encryption-key: ${APP_AI_CONFIG_REQUIRE_ENCRYPTION_KEY:true}
@@ -136,8 +126,6 @@ app:
     byok:
       # 允许用户配置凭证的供应商白名单（Base URL 一律由服务端解析，用户不可指定）
       allowed-providers: ${APP_AI_BYOK_ALLOWED_PROVIDERS:dashscope,kimi,deepseek,glm}
-      # 可用于 Embedding（知识库向量化/检索）的供应商；模型与 1024 维由平台固定，用户不可改
-      embedding-providers: ${APP_AI_BYOK_EMBEDDING_PROVIDERS:dashscope,glm}
       max-api-key-length: ${APP_AI_BYOK_MAX_API_KEY_LENGTH:512}
       max-model-name-length: ${APP_AI_BYOK_MAX_MODEL_NAME_LENGTH:128}
       # 用户级模型客户端缓存：按 userId::provider::model::credentialVersion 隔离，有界 + TTL
@@ -152,14 +140,10 @@ app:
         base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
         api-key: ${AI_BAILIAN_API_KEY}
         model: ${AI_MODEL:qwen3.5-flash}
-        embedding-model: text-embedding-v3
-        embedding-dimensions: 1024
-        supports-embedding: true
       lmstudio:
         base-url: http://localhost:1234
         api-key: ${PROVIDER_LMSTUDIO_API_KEY:lm-studio}
         model: qwen2.5-7b-instruct
-        supports-embedding: false
       # ===== 预设 Provider（填完 API Key 后即可使用）=====
       # Moonshot AI / Kimi（OpenAI 兼容） https://platform.moonshot.cn/
       kimi:
@@ -167,21 +151,16 @@ app:
         api-key: ${PROVIDER_KIMI_API_KEY:}
         model: ${PROVIDER_KIMI_MODEL:kimi-latest}
         temperature: 1
-        supports-embedding: false
       # DeepSeek（OpenAI 兼容） https://api-docs.deepseek.com/
       deepseek:
         base-url: https://api.deepseek.com
         api-key: ${PROVIDER_DEEPSEEK_API_KEY:}
         model: ${PROVIDER_DEEPSEEK_MODEL:deepseek-v4-flash}
-        supports-embedding: false
       # 智谱 AI / GLM（OpenAI 兼容） https://open.bigmodel.cn/
       glm:
         base-url: https://open.bigmodel.cn/api/coding/paas/v4
         api-key: ${PROVIDER_GLM_API_KEY:}
         model: ${PROVIDER_GLM_MODEL:glm-5}
-        embedding-model: embedding-3
-        embedding-dimensions: 1024
-        supports-embedding: true
     advisors:
       enabled: ${APP_AI_ADVISORS_ENABLED:true}
       tool-call-enabled: ${APP_AI_ADVISORS_TOOL_CALL_ENABLED:true}
@@ -203,30 +182,6 @@ app:
     structured-metrics-enabled: ${APP_AI_STRUCTURED_METRICS_ENABLED:true}
     # 是否启用 Spring AI 2.0 entity schema validation retry（失败时仍受 structured-max-attempts 外层控制）
     structured-schema-validation-enabled: ${APP_AI_STRUCTURED_SCHEMA_VALIDATION_ENABLED:true}
-    rag:
-      # RAG 业务指标（app.rag.*）开关
-      metrics-enabled: ${APP_AI_RAG_METRICS_ENABLED:true}
-      rewrite:
-        enabled: ${APP_AI_RAG_REWRITE_ENABLED:true}
-      search:
-        # 双路召回融合（改写 Query 与原始 Query），测评证明收益前默认关闭
-        merge-original-query: ${APP_AI_RAG_MERGE_ORIGINAL_QUERY:false}
-        short-query-length: ${APP_AI_RAG_SHORT_QUERY_LENGTH:4}
-        topk-short: ${APP_AI_RAG_TOPK_SHORT:20}
-        topk-medium: ${APP_AI_RAG_TOPK_MEDIUM:12}
-        topk-long: ${APP_AI_RAG_TOPK_LONG:8}
-        min-score-short: ${APP_AI_RAG_MIN_SCORE_SHORT:0.18}
-        min-score-default: ${APP_AI_RAG_MIN_SCORE_DEFAULT:0.28}
-      # 向量化 Chunk 策略（仅 Spring AI 2.0 原生参数，无 overlap；调整后需重新向量化）
-      vectorization:
-        splitter: ${APP_AI_RAG_VECTORIZATION_SPLITTER:token}
-        chunk-size: ${APP_AI_RAG_VECTORIZATION_CHUNK_SIZE:800}
-        min-chunk-size-chars: ${APP_AI_RAG_VECTORIZATION_MIN_CHUNK_SIZE_CHARS:350}
-        min-chunk-length-to-embed: ${APP_AI_RAG_VECTORIZATION_MIN_CHUNK_LENGTH_TO_EMBED:5}
-        max-num-chunks: ${APP_AI_RAG_VECTORIZATION_MAX_NUM_CHUNKS:10000}
-        keep-separator: ${APP_AI_RAG_VECTORIZATION_KEEP_SEPARATOR:true}
-        punctuation-marks: ${APP_AI_RAG_VECTORIZATION_PUNCTUATION_MARKS:.,?,!,\\n,。,？,！,；}
-        strategy-version: ${APP_AI_RAG_VECTORIZATION_STRATEGY_VERSION:token-v1}
 
   interview:
     follow-up-count: ${APP_INTERVIEW_FOLLOW_UP_COUNT:1}
@@ -243,10 +198,6 @@ app:
       - application/msword
       - application/vnd.openxmlformats-officedocument.wordprocessingml.document
       - text/plain
-
-  # 单个应用实例中同步处理的知识库上传数，不替代请求频率限制
-  knowledge-base-upload:
-    max-concurrent: ${APP_KNOWLEDGE_BASE_UPLOAD_MAX_CONCURRENT:4}
 
   # RustFS (S3兼容) 存储配置
   storage:
@@ -267,14 +218,6 @@ app:
   # 卡住任务恢复调度（P1-07）：pending 阈值必须大于正常排队时间（消费者单线程）
   async:
     recovery:
-      vectorize:
-        enabled: ${APP_ASYNC_RECOVERY_VECTORIZE_ENABLED:true}
-        pending-threshold: ${APP_ASYNC_RECOVERY_VECTORIZE_PENDING_THRESHOLD:10m}
-        processing-threshold: ${APP_ASYNC_RECOVERY_VECTORIZE_PROCESSING_THRESHOLD:15m}
-        heartbeat-throttle: ${APP_ASYNC_RECOVERY_VECTORIZE_HEARTBEAT_THROTTLE:30s}
-        interval-ms: ${APP_ASYNC_RECOVERY_VECTORIZE_INTERVAL_MS:60000}
-        batch-size: ${APP_ASYNC_RECOVERY_VECTORIZE_BATCH_SIZE:10}
-        max-recovery-count: ${APP_ASYNC_RECOVERY_VECTORIZE_MAX_RECOVERY_COUNT:3}
       resume-analyze:
         enabled: ${APP_ASYNC_RECOVERY_RESUME_ENABLED:true}
         pending-threshold: ${APP_ASYNC_RECOVERY_RESUME_PENDING_THRESHOLD:10m}

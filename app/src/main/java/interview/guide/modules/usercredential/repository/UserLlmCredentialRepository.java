@@ -25,11 +25,6 @@ public interface UserLlmCredentialRepository extends JpaRepository<UserLlmCreden
      */
     List<UserLlmCredentialEntity> findByUserIdAndChatEnabledTrueOrderByUpdatedAtDesc(Long userId);
 
-    /**
-     * 查询用户可用于 Embedding 的凭证。
-     */
-    List<UserLlmCredentialEntity> findByUserIdAndEmbeddingEnabledTrueOrderByUpdatedAtDesc(Long userId);
-
     void deleteByUserIdAndProviderKey(Long userId, String providerKey);
 
     boolean existsByUserIdAndProviderKey(Long userId, String providerKey);

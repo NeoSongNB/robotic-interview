@@ -7,7 +7,7 @@ Spring Boot 4.1.0 + Java 25 + Spring AI 2.0.0 + React 面试平台。
 ## Tech Stack
 
 - Backend: Spring Boot 4.1.0 / Java 25 / Gradle / Spring AI 2.0.0
-- Database: PostgreSQL + pgvector，向量维度 1024，距离类型 COSINE
+- Database: PostgreSQL（历史 Flyway 迁移仍需 pgvector 扩展，业务已无向量库）
 - Cache & async: Redis / Redisson / Redis Stream
 - Storage & parsing: RustFS/S3 / Apache Tika
 - Mapping & export: MapStruct / iText 8 / SpringDoc OpenAPI

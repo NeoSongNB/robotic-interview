@@ -32,7 +32,6 @@ class LlmProviderControllerTest {
             .baseUrl("http://test")
             .maskedApiKey("sk-***key")
             .model("qwen")
-            .embeddingModel("text-embedding-v3")
             .build();
         when(configService.listProviders()).thenReturn(List.of(dto));
 

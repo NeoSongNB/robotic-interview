@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 简历分析卡住任务恢复调度器（P1-07）。语义与 VectorizeRecoveryScheduler 一致。
+ * 简历分析卡住任务恢复调度器（P1-07）。
  */
 @Slf4j
 @Component

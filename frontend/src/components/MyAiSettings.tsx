@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   AlertCircle,
   CheckCircle2,
-  Database,
   Eye,
   EyeOff,
   KeyRound,
@@ -276,22 +275,15 @@ export default function MyAiSettings() {
         </div>
       )}
 
-      {/* 能力就绪状态：Chat / Embedding / 语音 分开展示，未就绪时给出明确引导 */}
+      {/* 能力就绪状态：Chat / 语音 分开展示，未就绪时给出明确引导 */}
       {status && (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <StatusCard
             icon={<MessageSquare className="h-4 w-4" />}
             title="对话模型"
             ready={status.chatReady}
             readyText={`${status.chatProviderKey ?? ''} · ${status.chatModelName ?? ''}`}
             pendingText="未配置，简历分析 / 面试出题 / 评分均不可用"
-          />
-          <StatusCard
-            icon={<Database className="h-4 w-4" />}
-            title="向量模型（Embedding）"
-            ready={status.embeddingReady}
-            readyText={`${status.embeddingProviderKey ?? ''} · ${status.embeddingModelName ?? ''}（${status.embeddingDimensions ?? 1024} 维）`}
-            pendingText="未配置，知识库上传与检索不可用（需 DashScope 凭证）"
           />
           <StatusCard
             icon={<Mic className="h-4 w-4" />}

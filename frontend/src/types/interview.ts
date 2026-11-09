@@ -9,8 +9,6 @@ export interface InterviewSession {
   currentQuestionIndex: number;
   questions: InterviewQuestion[];
   status: 'CREATED' | 'IN_PROGRESS' | 'COMPLETED' | 'EVALUATED';
-  knowledgeBaseId?: number | null;
-  interviewCategory?: string | null;
 }
 
 export interface InterviewQuestion {

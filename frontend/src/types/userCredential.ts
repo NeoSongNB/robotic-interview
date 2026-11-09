@@ -14,8 +14,6 @@ export interface UserCredential {
   updatedAt: string | null;
   /** 该凭证可用于对话模型调用 */
   chatEnabled?: boolean;
-  /** 该凭证可用于 Embedding（知识库向量化/检索） */
-  embeddingEnabled?: boolean;
 }
 
 export interface ProviderPreset {
@@ -32,10 +30,6 @@ export interface CredentialStatus {
   chatReady: boolean;
   chatProviderKey: string | null;
   chatModelName: string | null;
-  embeddingReady: boolean;
-  embeddingProviderKey: string | null;
-  embeddingModelName: string | null;
-  embeddingDimensions: number | null;
   speechReady: boolean;
   speechProviderKey: string | null;
 }
@@ -75,10 +69,8 @@ export const CREDENTIAL_ERROR_CODES = {
   PROVIDER_NOT_ALLOWED: 13003,
   BASEURL_NOT_ALLOWED: 13004,
   DECRYPTION_FAILED: 13006,
-  EMBEDDING_NOT_CONFIGURED: 13007,
   MODEL_NOT_ALLOWED: 13008,
   PROVIDER_AUTHENTICATION_FAILED: 13009,
   TEST_FAILED: 13010,
   AI_CONTEXT_USER_UNAVAILABLE: 13011,
-  EMBEDDING_MODEL_MISMATCH: 13012,
 } as const;

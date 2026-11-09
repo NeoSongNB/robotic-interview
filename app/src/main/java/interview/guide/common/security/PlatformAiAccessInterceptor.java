@@ -21,12 +21,10 @@ import java.util.List;
  * <p><b>阶段二</b>：业务 AI 调用已全部改为用户级凭证，平台全局 Key 不再参与用户请求。
  * 因此闸门语义改为<b>前置凭证就绪校验</b>：</p>
  * <ul>
- *   <li>用户既没有可用的 Chat 凭证、也没有可用的 Embedding 凭证时，
- *       直接返回明确的配置错误 {@code USER_CREDENTIAL_NOT_CONFIGURED}，
- *       而不是让请求进入业务链路后再失败；</li>
- *   <li>用户已配置凭证时放行，由各业务服务按自身能力（Chat / Embedding / 语音）
- *       解析<b>该用户自己的</b>凭证；缺少对应能力时由服务层返回
- *       {@code EMBEDDING_CREDENTIAL_NOT_CONFIGURED} 等精确错误；</li>
+ *   <li>用户没有可用的 Chat 凭证时，直接返回明确的配置错误
+ *       {@code USER_CREDENTIAL_NOT_CONFIGURED}，而不是让请求进入业务链路后再失败；</li>
+ *   <li>用户已配置凭证时放行，由各业务服务按自身能力（Chat / 语音）
+ *       解析<b>该用户自己的</b>凭证；缺少对应能力时由服务层返回精确错误；</li>
  *   <li><b>不再</b>因为"平台全局 Key 被禁用"而拒绝请求，也<b>不会</b>回退到全局 Key。</li>
  * </ul>
  */
@@ -36,16 +34,13 @@ import java.util.List;
 public class PlatformAiAccessInterceptor implements HandlerInterceptor {
 
     /**
-     * 会实际触发 LLM / Embedding / ASR / TTS 调用的接口模式。
+     * 会实际触发 LLM / ASR / TTS 调用的接口模式。
      *
      * <p>只校验写入型方法（POST/PUT），查询与删除不受影响。</p>
      */
     private static final List<String> AI_WRITE_PATTERNS = List.of(
         "/api/resumes/**",
         "/api/interview/**",
-        "/api/knowledgebase/**",
-        "/api/knowledgebase-interviews/**",
-        "/api/rag-chat/**",
         "/api/voice-interview/**"
     );
 

@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import {
   canRetryUpload,
-  KNOWLEDGE_BASE_FILE_POLICY,
   RESUME_FILE_POLICY,
   getFileIdentity,
   MAX_BATCH_FILES,
@@ -21,20 +20,12 @@ const file = (name: string, size = 1024, lastModified = 1) => (
   { name, size, lastModified } as File
 );
 
-test('文件校验限制格式、空文件和 50MB 大小', () => {
-  assert.equal(validateUploadFile(file('guide.pdf'), KNOWLEDGE_BASE_FILE_POLICY), null);
-  assert.equal(validateUploadFile(file('guide.MD'), KNOWLEDGE_BASE_FILE_POLICY), null);
-  assert.equal(validateUploadFile(file('empty.txt', 0), KNOWLEDGE_BASE_FILE_POLICY), '文件为空');
-  assert.equal(validateUploadFile(file('large.docx', 50 * 1024 * 1024 + 1), KNOWLEDGE_BASE_FILE_POLICY), '文件超过 50MB');
-  assert.equal(validateUploadFile(file('archive.zip'), KNOWLEDGE_BASE_FILE_POLICY), '仅支持 PDF、DOCX、DOC、TXT、MD');
-});
-
 test('连续选择共用列表去重和 10 个文件上限', () => {
-  const firstSelection = selectUploadFiles([], [file('guide.pdf')], KNOWLEDGE_BASE_FILE_POLICY, 1);
+  const firstSelection = selectUploadFiles([], [file('guide.pdf')], RESUME_FILE_POLICY, 1);
   const secondSelection = selectUploadFiles(firstSelection.accepted, [
     file('guide.pdf'),
     ...Array.from({ length: 10 }, (_, index) => file(`${index}.txt`, 1024, index + 2)),
-  ], KNOWLEDGE_BASE_FILE_POLICY, 2);
+  ], RESUME_FILE_POLICY, 2);
 
   assert.equal(firstSelection.accepted[0]?.status, 'READY');
   assert.equal(secondSelection.accepted.length, MAX_BATCH_FILES - 1);
@@ -90,7 +81,7 @@ test('单项失败不会阻断队列中的后续任务', async () => {
   queue.dispose();
 });
 
-test('上传和向量化状态、生产限制保持独立', () => {
+test('上传状态、生产限制保持独立', () => {
   assert.equal(toBatchUploadStatus('PENDING'), 'PENDING');
   assert.equal(toBatchUploadStatus('PROCESSING'), 'PROCESSING');
   assert.equal(toBatchUploadStatus('COMPLETED'), 'COMPLETED');
@@ -101,10 +92,10 @@ test('上传和向量化状态、生产限制保持独立', () => {
   assert.equal(canRetryUpload({ status: 'UPLOAD_FAILED', retryAvailableAt: 3000 }, 3000), true);
 });
 
-
-test('简历复用同一校验器，但保留 10MB 和自身格式限制', () => {
+test('简历校验限制格式、空文件和 10MB 大小', () => {
   assert.equal(validateUploadFile(file('resume.pdf', 10 * 1024 * 1024), RESUME_FILE_POLICY), null);
   assert.equal(validateUploadFile(file('resume.pdf', 10 * 1024 * 1024 + 1), RESUME_FILE_POLICY), '文件超过 10MB');
   assert.equal(validateUploadFile(file('resume.md'), RESUME_FILE_POLICY), '仅支持 PDF、DOCX、DOC、TXT');
   assert.equal(validateUploadFile(file('resume.doc'), RESUME_FILE_POLICY), null);
+  assert.equal(validateUploadFile(file('empty.txt', 0), RESUME_FILE_POLICY), '文件为空');
 });

@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
  * <b>绝不能</b>因为异步线程丢失 SecurityContext 就回退到开发者全局 Key。</p>
  *
  * <p>因此 Redis Stream 消息里<b>不放</b> userId、apiKey、ProviderSnapshot 或模型客户端对象，
- * Worker 一律通过业务资源（简历 / 会话 / 知识库）的 {@code user_id} 反查所有者。
+ * Worker 一律通过业务资源（简历 / 会话）的 {@code user_id} 反查所有者。
  * 本守卫负责在反查结果为空时立即失败，而不是让空 userId 继续向下传递。</p>
  */
 @Slf4j

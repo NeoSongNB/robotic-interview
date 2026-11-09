@@ -4,8 +4,6 @@
 --   1. 保留特殊账户 system（DISABLED，无法登录，FK 归属历史数据所必须）。
 --   2. 保留平台级配置 llm_provider_config / llm_global_setting（非账户数据）。
 --   3. 按 FK 依赖顺序删除，避免 RESTRICT 冲突。
---   4. vector_store 不做处理：检索按 knowledge_base_id 过滤，已删除 KB 的
---      孤立向量不会被查询到，清空反而会破坏 system 历史 KB 的可检索性。
 -- ============================================================
 
 DO $$
@@ -24,28 +22,16 @@ BEGIN
    WHERE resume_id IN (SELECT id FROM resumes WHERE user_id <> sys_id);
   DELETE FROM resumes WHERE user_id <> sys_id;
 
-  -- 3) RAG 消息 / 会话-KB 关联 -> RAG 会话
-  DELETE FROM rag_chat_messages
-   WHERE session_id IN (SELECT id FROM rag_chat_sessions WHERE user_id <> sys_id);
-  DELETE FROM rag_session_knowledge_bases
-   WHERE session_id IN (SELECT id FROM rag_chat_sessions WHERE user_id <> sys_id);
-  DELETE FROM rag_chat_sessions WHERE user_id <> sys_id;
-
-  -- 4) 知识库题目 -> 知识库
-  DELETE FROM knowledge_base_questions
-   WHERE knowledge_base_id IN (SELECT id FROM knowledge_bases WHERE user_id <> sys_id);
-  DELETE FROM knowledge_bases WHERE user_id <> sys_id;
-
-  -- 5) 语音面试消息 / 评测 -> 语音会话（这两张表无 FK，按 session_id 清理避免孤儿行）
+  -- 3) 语音面试消息 / 评测 -> 语音会话（这两张表无 FK，按 session_id 清理避免孤儿行）
   DELETE FROM voice_interview_messages
    WHERE session_id IN (SELECT id FROM voice_interview_sessions WHERE user_id <> sys_id);
   DELETE FROM voice_interview_evaluations
    WHERE session_id IN (SELECT id FROM voice_interview_sessions WHERE user_id <> sys_id);
   DELETE FROM voice_interview_sessions WHERE user_id <> sys_id;
 
-  -- 6) 用户级 LLM 凭证（API Key）
+  -- 4) 用户级 LLM 凭证（API Key）
   DELETE FROM user_llm_credential WHERE user_id <> sys_id;
 
-  -- 7) 最后删除非 system 账户
+  -- 5) 最后删除非 system 账户
   DELETE FROM app_user WHERE id <> sys_id;
 END $$;

@@ -52,22 +52,8 @@ public class InterviewPersistenceService {
                                               String llmProvider,
                                               String skillId,
                                               String difficulty) {
-        return saveSession(sessionId, resumeId, totalQuestions, questions, llmProvider, skillId, difficulty,
-            "NORMAL", null, null);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public InterviewSessionEntity saveSession(String sessionId, Long resumeId,
-                                              int totalQuestions,
-                                              List<InterviewQuestionDTO> questions,
-                                              String llmProvider,
-                                              String skillId,
-                                              String difficulty,
-                                              String sourceType,
-                                              Long knowledgeBaseId,
-                                              String interviewCategory) {
         return saveSessionInternal(sessionId, resumeId, totalQuestions, questions, llmProvider,
-            skillId, difficulty, sourceType, knowledgeBaseId, interviewCategory, null);
+            skillId, difficulty, "NORMAL", null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -79,7 +65,7 @@ public class InterviewPersistenceService {
                                                         String difficulty,
                                                         String requestId) {
         return saveSessionInternal(sessionId, resumeId, totalQuestions, questions, llmProvider,
-            skillId, difficulty, "NORMAL", null, null, requestId);
+            skillId, difficulty, "NORMAL", requestId);
     }
 
     private InterviewSessionEntity saveSessionInternal(String sessionId, Long resumeId,
@@ -89,8 +75,6 @@ public class InterviewPersistenceService {
                                                        String skillId,
                                                        String difficulty,
                                                        String sourceType,
-                                                       Long knowledgeBaseId,
-                                                       String interviewCategory,
                                                        String requestId) {
         try {
             InterviewSessionEntity session = new InterviewSessionEntity();
@@ -106,8 +90,6 @@ public class InterviewPersistenceService {
             session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
             session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
             session.setSourceType(sourceType != null ? sourceType : "NORMAL");
-            session.setKnowledgeBaseId(knowledgeBaseId);
-            session.setInterviewCategory(interviewCategory);
 
             // 简历可选：有 resumeId 则关联简历（必须属于当前用户）
             if (resumeId != null) {

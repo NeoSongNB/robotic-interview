@@ -36,7 +36,7 @@ export interface ProcessingResult {
 export type BatchUploadResult = Pick<BatchUploadItem,
   'status' | 'duplicate' | 'error' | 'needsStatusRefresh'> & { entityId: number };
 
-/** 业务适配器保持稳定引用，上传编排无需了解简历或知识库响应结构。 */
+/** 业务适配器保持稳定引用，上传编排无需了解简历响应结构。 */
 export interface BatchUploadAdapter {
   processLabel: string;
   upload: (file: File, customName?: string) => Promise<BatchUploadResult>;

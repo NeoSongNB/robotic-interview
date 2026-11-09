@@ -11,13 +11,11 @@
     "test:voice-url": "node --test src/utils/voiceWebSocketUrl.test.ts",
     "test:e2e:voice": "playwright test e2e/voice-interview.spec.ts e2e/voice-connection.spec.ts",
     "test:interview-history": "node --test src/pages/interviewHistoryStats.test.ts",
-    "test:question-generation": "node --test src/pages/questionGenerationStatus.test.ts",
-    "test:interview-capacity": "node --test src/components/knowledgebaseInterview/interviewCapacity.test.ts",
     "test:interview-entry": "node --test src/pages/interviewEntry.test.ts",
     "test:batch-upload": "node --test src/utils/batchUpload.test.ts",
     "test:resume-document": "node --test src/types/resumeDocument.test.ts",
     "test:resume-export": "node --test src/utils/resumeExport.test.ts",
-    "test:e2e:batch-upload": "playwright test e2e/knowledgebase-upload.spec.ts e2e/resume-upload.spec.ts e2e/upload-proxy.spec.ts"
+    "test:e2e:batch-upload": "playwright test e2e/resume-upload.spec.ts e2e/upload-proxy.spec.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
@@ -28,12 +26,10 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.6.0",
-    "react-markdown": "^9.0.1",
     "react-router-dom": "^7.11.0",
     "react-syntax-highlighter": "^16.1.0",
     "react-virtuoso": "^4.18.1",
-    "recharts": "^3.6.0",
-    "remark-gfm": "^4.0.0"
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

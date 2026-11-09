@@ -54,10 +54,9 @@ public class UserCredentialController {
     }
 
     /**
-     * 当前用户 AI 能力就绪状态（Chat / Embedding / 语音）。
+     * 当前用户 AI 能力就绪状态（Chat / 语音）。
      *
-     * <p>前端据此展示"Chat 已就绪 / 需要配置 Embedding / 语音不可用"等状态，
-     * 不返回任何凭证内容。</p>
+     * <p>前端据此展示"Chat 已就绪 / 语音不可用"等状态，不返回任何凭证内容。</p>
      */
     @GetMapping("/status")
     public Result<CredentialStatusDTO> status() {

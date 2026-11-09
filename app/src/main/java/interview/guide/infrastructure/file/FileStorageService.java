@@ -65,20 +65,6 @@ public class FileStorageService {
     }
 
     /**
-     * 上传知识库文件
-     */
-    public String uploadKnowledgeBase(MultipartFile file) {
-        return uploadFile(file, "knowledgebases");
-    }
-
-    /**
-     * 删除知识库文件
-     */
-    public void deleteKnowledgeBase(String fileKey) {
-        deleteFile(fileKey);
-    }
-
-    /**
      * 下载文件（通用方法）
      *
      * @param fileKey 文件存储键

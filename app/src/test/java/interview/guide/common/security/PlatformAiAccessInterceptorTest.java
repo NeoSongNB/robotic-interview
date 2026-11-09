@@ -77,17 +77,6 @@ class PlatformAiAccessInterceptorTest {
     assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
   }
 
-  @Test
-  @DisplayName("知识库等新增前缀同样被纳入闸门")
-  void coversKnowledgeBasePaths() {
-    when(currentUserProvider.requireUserId()).thenReturn(USER_ID);
-    when(userCredentialService.hasAnyUsableCredential(USER_ID)).thenReturn(false);
-
-    assertThatThrownBy(() -> interceptor.preHandle(post("/api/knowledgebase/upload"),
-        new MockHttpServletResponse(), new Object()))
-        .isInstanceOf(BusinessException.class);
-  }
-
   private MockHttpServletRequest post(String uri) {
     return new MockHttpServletRequest("POST", uri);
   }

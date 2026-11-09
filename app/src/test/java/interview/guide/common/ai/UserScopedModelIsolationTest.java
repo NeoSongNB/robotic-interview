@@ -64,7 +64,6 @@ class UserScopedModelIsolationTest {
   @BeforeEach
   void setUp() {
     LlmProviderProperties properties = new LlmProviderProperties();
-    properties.setEmbeddingDimensions(1024);
     registry = new LlmProviderRegistry(properties, new ByokProperties(), null, null, null,
         userCredentialService, null, null, null);
 

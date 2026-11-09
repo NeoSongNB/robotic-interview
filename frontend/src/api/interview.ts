@@ -19,8 +19,6 @@ export interface TextSessionMeta {
   evaluateError: string | null;
   overallScore: number | null;
   sourceType: string | null;
-  knowledgeBaseId: number | null;
-  interviewCategory?: string | null;
   createdAt: string;
   completedAt: string | null;
 }

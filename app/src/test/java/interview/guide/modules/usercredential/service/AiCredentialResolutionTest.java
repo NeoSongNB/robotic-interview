@@ -37,7 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 用户级模型上下文解析规则验证（Chat 与 Embedding 分别解析）。
+ * 用户级模型上下文解析规则验证（Chat）。
  *
  * <p>这是 BYOK 阶段二「不允许回退平台全局 Key」的核心行为测试。</p>
  */
@@ -66,14 +66,11 @@ class AiCredentialResolutionTest {
     ByokProperties byok = new ByokProperties();
     LlmProviderProperties llm = new LlmProviderProperties();
     llm.setDefaultProvider(DASHSCOPE);
-    llm.setDefaultEmbeddingProvider(DASHSCOPE);
-    llm.setEmbeddingDimensions(1024);
 
     Map<String, LlmProviderProperties.ProviderConfig> providers = new HashMap<>();
-    providers.put(DEEPSEEK, provider("https://api.deepseek.com", "deepseek-chat", null, false));
-    providers.put(DASHSCOPE,
-        provider("https://dashscope.aliyuncs.com/compatible-mode", "qwen-plus", "text-embedding-v3", true));
-    providers.put("glm", provider("https://open.bigmodel.cn/api/paas/v4", "glm-4", "embedding-3", true));
+    providers.put(DEEPSEEK, provider("https://api.deepseek.com", "deepseek-chat"));
+    providers.put(DASHSCOPE, provider("https://dashscope.aliyuncs.com/compatible-mode", "qwen-plus"));
+    providers.put("glm", provider("https://open.bigmodel.cn/api/paas/v4", "glm-4"));
     llm.setProviders(providers);
 
     service = new UserCredentialService(repository, encryptionService,
@@ -87,9 +84,6 @@ class AiCredentialResolutionTest {
     org.mockito.Mockito.lenient().when(repository.findByUserIdAndChatEnabledTrueOrderByUpdatedAtDesc(any()))
         .thenAnswer(inv -> store.values().stream()
             .filter(e -> Boolean.TRUE.equals(e.getChatEnabled())).toList());
-    org.mockito.Mockito.lenient().when(repository.findByUserIdAndEmbeddingEnabledTrueOrderByUpdatedAtDesc(any()))
-        .thenAnswer(inv -> store.values().stream()
-            .filter(e -> Boolean.TRUE.equals(e.getEmbeddingEnabled())).toList());
     org.mockito.Mockito.lenient().when(repository.save(any())).thenAnswer(inv -> {
       UserLlmCredentialEntity e = inv.getArgument(0);
       if (e.getUpdatedAt() == null) {
@@ -103,13 +97,10 @@ class AiCredentialResolutionTest {
     org.mockito.Mockito.lenient().when(encryptionService.decrypt(any(), any())).thenReturn("sk-plaintext-key");
   }
 
-  private LlmProviderProperties.ProviderConfig provider(String baseUrl, String model,
-                                                       String embeddingModel, boolean supportsEmbedding) {
+  private LlmProviderProperties.ProviderConfig provider(String baseUrl, String model) {
     LlmProviderProperties.ProviderConfig config = new LlmProviderProperties.ProviderConfig();
     config.setBaseUrl(baseUrl);
     config.setModel(model);
-    config.setEmbeddingModel(embeddingModel);
-    config.setSupportsEmbedding(supportsEmbedding);
     return config;
   }
 
@@ -123,30 +114,15 @@ class AiCredentialResolutionTest {
   }
 
   @Test
-  @DisplayName("只有 DeepSeek 凭证时 Embedding 解析失败（需单独配置 DashScope），错误码明确")
-  void deepseekOnlyCannotDoEmbedding() {
-    service.save(USER_ID, new SaveCredentialRequest(DEEPSEEK, "sk-deepseek-0123456789", "deepseek-chat"));
-
-    assertThatThrownBy(() -> service.embeddingContextForUser(USER_ID))
-        .isInstanceOf(BusinessException.class)
-        .extracting(e -> ((BusinessException) e).getCode())
-        .isEqualTo(ErrorCode.EMBEDDING_CREDENTIAL_NOT_CONFIGURED.getCode());
-  }
-
-  @Test
-  @DisplayName("DashScope 凭证可同时用于 Chat 与固定 1024 维 Embedding")
-  void dashscopeCoversChatAndEmbedding() {
+  @DisplayName("DashScope 凭证可用于 Chat 并标记语音就绪")
+  void dashscopeCoversChatAndSpeech() {
     service.save(USER_ID, new SaveCredentialRequest(DASHSCOPE, "sk-dashscope-0123456789", "qwen-plus"));
 
     AiExecutionContext chat = service.chatContextForUser(USER_ID, null);
-    AiExecutionContext embedding = service.embeddingContextForUser(USER_ID);
 
     assertThat(chat.providerKey()).isEqualTo(DASHSCOPE);
     assertThat(chat.modelName()).isEqualTo("qwen-plus");
-    assertThat(embedding.providerKey()).isEqualTo(DASHSCOPE);
-    // Embedding 模型由平台固定，用户不可修改
-    assertThat(embedding.modelName()).isEqualTo("text-embedding-v3");
-    assertThat(service.status(USER_ID).embeddingDimensions()).isEqualTo(1024);
+    assertThat(service.status(USER_ID).chatReady()).isTrue();
   }
 
   @Test
@@ -190,19 +166,18 @@ class AiCredentialResolutionTest {
       components.add(component.getName());
     }
     assertThat(components).containsExactlyInAnyOrder(
-        "providerKey", "configured", "modelName", "keyTail", "updatedAt", "chatEnabled", "embeddingEnabled");
+        "providerKey", "configured", "modelName", "keyTail", "updatedAt", "chatEnabled");
   }
 
   @Test
-  @DisplayName("状态接口分别暴露 Chat / Embedding / 语音就绪状态")
+  @DisplayName("状态接口分别暴露 Chat / 语音就绪状态")
   void statusReportsEachCapability() {
     service.save(USER_ID, new SaveCredentialRequest(DASHSCOPE, "sk-dashscope-0123456789", "qwen-plus"));
     CredentialStatusDTO status = service.status(USER_ID);
 
     assertThat(status.chatReady()).isTrue();
-    assertThat(status.embeddingReady()).isTrue();
     assertThat(status.speechReady()).isTrue();
-    assertThat(status.embeddingModelName()).isEqualTo("text-embedding-v3");
+    assertThat(status.chatModelName()).isEqualTo("qwen-plus");
   }
 
   @Test

@@ -94,13 +94,6 @@ public class LlmProviderController {
     return Result.success();
   }
 
-  @PutMapping("/default-embedding-provider")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
-  public Result<Void> updateDefaultEmbeddingProvider(@RequestBody DefaultProviderDTO request) {
-    configService.updateDefaultEmbeddingProvider(request);
-    return Result.success();
-  }
-
   // ===== Voice ASR/TTS Config =====
 
   @GetMapping("/voice/asr")

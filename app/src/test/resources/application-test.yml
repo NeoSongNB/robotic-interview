@@ -35,19 +35,9 @@ spring:
         options:
       model: qwen3.5-flash
           temperature: 0.2
-      embedding:
-        options:
-          model: text-embedding-v3
     retry:
       max-attempts: 1
       on-client-errors: false
-    vectorstore:
-      pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024
-        initialize-schema: false
-        remove-existing-vector-store-table: false
 
 app:
   ai:
@@ -65,16 +55,6 @@ app:
         model: qwen2.5-7b-instruct
     structured-max-attempts: 2
     structured-include-last-error: true
-    rag:
-      rewrite:
-        enabled: true
-      search:
-        short-query-length: 4
-        topk-short: 20
-        topk-medium: 12
-        topk-long: 8
-        min-score-short: 0.18
-        min-score-default: 0.28
   interview:
     follow-up-count: 1
     evaluation:

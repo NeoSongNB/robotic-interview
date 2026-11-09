@@ -17,12 +17,6 @@ const ResumeDetailPage = lazy(() => import('./pages/ResumeDetailPage'));
 const ResumeStudioPage = lazy(() => import('./pages/ResumeStudioPage'));
 const Interview = lazy(() => import('./pages/InterviewPage'));
 const InterviewHistoryPage = lazy(() => import('./pages/InterviewHistoryPage'));
-const KnowledgeBaseQueryPage = lazy(() => import('./pages/KnowledgeBaseQueryPage'));
-const KnowledgeBaseUploadPage = lazy(() => import('./pages/KnowledgeBaseUploadPage'));
-const KnowledgeBaseManagePage = lazy(() => import('./pages/KnowledgeBaseManagePage'));
-const KnowledgeBaseInterviewPage = lazy(() => import('./pages/KnowledgeBaseInterviewLandingPage'));
-const KnowledgeBaseInterviewQuestionsPage = lazy(() => import('./pages/KnowledgeBaseInterviewQuestionsPage'));
-const KnowledgeBaseInterviewSessionPage = lazy(() => import('./pages/KnowledgeBaseInterviewSessionPage'));
 const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewHubPage = lazy(() => import('./pages/InterviewHubPage'));
@@ -246,24 +240,8 @@ function App() {
               {/* 语音面试评估报告 */}
               <Route path="voice-interview/:sessionId/evaluation" element={<VoiceInterviewEvaluationPage />} />
 
-              {/* 知识库管理 */}
-              <Route path="knowledgebase" element={<KnowledgeBaseManagePageWrapper />} />
-
-              {/* 知识库面试 */}
-              <Route path="knowledgebase-interview" element={<KnowledgeBaseInterviewPage />} />
-              <Route path="knowledgebase-interview/:knowledgeBaseId/questions" element={<KnowledgeBaseInterviewQuestionsPage />} />
-              <Route path="knowledgebase-interview/:knowledgeBaseId/interviews" element={<KnowledgeBaseInterviewHistoryWrapper />} />
-              <Route path="knowledgebase-interview/:knowledgeBaseId/interviews/:sessionId" element={<InterviewDetailPageWrapper />} />
-              <Route path="knowledgebase-interview/:sessionId" element={<KnowledgeBaseInterviewSessionPage />} />
-
-              {/* 知识库上传 */}
-              <Route path="knowledgebase/upload" element={<KnowledgeBaseUploadPageWrapper />} />
-
               {/* 设置 */}
               <Route path="settings" element={<SettingsPage />} />
-
-              {/* 问答助手（知识库聊天） */}
-              <Route path="knowledgebase/chat" element={<KnowledgeBaseQueryPageWrapper />} />
             </Route>
           </Routes>
         </Suspense>
@@ -296,49 +274,14 @@ function InterviewHistoryWrapper() {
   return <InterviewHistoryPage onBack={handleBack} onViewInterview={handleViewInterview} onRestartInterview={handleRestartInterview} onContinueInterview={handleContinueInterview} />;
 }
 
-// 知识库面试记录页面包装器
-function KnowledgeBaseInterviewHistoryWrapper() {
-  const navigate = useNavigate();
-  const { knowledgeBaseId } = useParams<{ knowledgeBaseId: string }>();
-  const id = knowledgeBaseId ? Number(knowledgeBaseId) : NaN;
-
-  if (Number.isNaN(id)) {
-    return <Navigate to="/knowledgebase-interview" replace />;
-  }
-
-  const handleBack = () => {
-    navigate(`/knowledgebase-interview/${id}/questions`);
-  };
-
-  const handleViewInterview = (sessionId: string) => {
-    navigate(`/knowledgebase-interview/${id}/interviews/${sessionId}`);
-  };
-
-  const handleContinueInterview = (sessionId: string) => {
-    navigate(`/knowledgebase-interview/${sessionId}`, { state: { knowledgeBaseId: id } });
-  };
-
-  return (
-    <InterviewHistoryPage
-      knowledgeBaseId={id}
-      onBack={handleBack}
-      onViewInterview={handleViewInterview}
-      onContinueInterview={handleContinueInterview}
-    />
-  );
-}
-
 // 面试详情报告页面包装器
 function InterviewDetailPageWrapper() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { knowledgeBaseId } = useParams<{ knowledgeBaseId?: string }>();
   const navigate = useNavigate();
   const [interview, setInterview] = useState<InterviewDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const backTarget = knowledgeBaseId
-    ? `/knowledgebase-interview/${knowledgeBaseId}/interviews`
-    : '/interviews';
+  const backTarget = '/interviews';
 
   useEffect(() => {
     if (!sessionId) {
@@ -399,52 +342,6 @@ function InterviewDetailPageWrapper() {
     </div>
   );
 }
-function KnowledgeBaseManagePageWrapper() {
-  const navigate = useNavigate();
-
-  const handleUpload = () => {
-    navigate(ROUTES.knowledgebaseUpload);
-  };
-
-  const handleChat = () => {
-    navigate('/knowledgebase/chat');
-  };
-
-  return <KnowledgeBaseManagePage onUpload={handleUpload} onChat={handleChat} />;
-}
-
-// 知识库问答页面包装器
-function KnowledgeBaseQueryPageWrapper() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isChatMode = location.pathname === '/knowledgebase/chat';
-
-  const handleBack = () => {
-    if (isChatMode) {
-      navigate('/knowledgebase');
-    } else {
-      navigate('/history');
-    }
-  };
-
-  const handleUpload = () => {
-    navigate(ROUTES.knowledgebaseUpload);
-  };
-
-  return <KnowledgeBaseQueryPage onBack={handleBack} onUpload={handleUpload} />;
-}
-
-// 知识库上传页面包装器
-function KnowledgeBaseUploadPageWrapper() {
-  const navigate = useNavigate();
-
-  const handleBack = () => {
-    navigate('/knowledgebase');
-  };
-
-  return <KnowledgeBaseUploadPage onBack={handleBack} />;
-}
-
 // 语音面试页面包装器
 function VoiceInterviewPageWrapper() {
   return <VoiceInterviewPage />;

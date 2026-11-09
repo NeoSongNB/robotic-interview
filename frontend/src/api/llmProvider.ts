@@ -37,9 +37,6 @@ export const llmProviderApi = {
   updateDefaultProvider: (data: DefaultProvider) =>
     request.put<void>('/api/llm-provider/default-provider', data),
 
-  updateDefaultEmbeddingProvider: (data: DefaultProvider) =>
-    request.put<void>('/api/llm-provider/default-embedding-provider', data),
-
   // Voice ASR/TTS Config
   getAsrConfig: () =>
     request.get<AsrConfig>('/api/llm-provider/voice/asr'),

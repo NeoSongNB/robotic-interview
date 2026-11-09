@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { historyApi } from '../api/history';
 import { resumeDocumentApi } from '../api/resumeDocument';
-import { knowledgeBaseApi } from '../api/knowledgebase';
 import { interviewApi } from '../api/interview';
 import { ROUTES } from '../constants/routes';
 import { EmptyState, Skeleton } from './ui';
@@ -17,17 +16,16 @@ type Hit = {
   path: string;
 };
 
-const GROUP_ORDER = ['在线简历', '上传简历', '知识库', '面试记录'];
+const GROUP_ORDER = ['在线简历', '上传简历', '面试记录'];
 
 /**
  * 前端聚合的全局搜索：后端列表接口本来就返回全量数据，这里并行拉取后在浏览器里过滤，
  * 不新增后端端点、不改动分页。单个列表失败不影响其它分组（Promise.allSettled）。
  */
 async function loadHits(): Promise<Hit[]> {
-  const [resumes, documents, bases, sessions] = await Promise.allSettled([
+  const [resumes, documents, sessions] = await Promise.allSettled([
     historyApi.getResumes(),
     resumeDocumentApi.list(),
-    knowledgeBaseApi.getAllKnowledgeBases(),
     interviewApi.listSessions(),
   ]);
 
@@ -47,15 +45,6 @@ async function loadHits(): Promise<Hit[]> {
         key: `resume-${item.id}`, group: '上传简历', title: item.filename,
         subtitle: `上传于 ${item.uploadedAt?.slice(0, 10) ?? '未知时间'}`,
         path: `/history/${item.id}`,
-      });
-    }
-  }
-  if (bases.status === 'fulfilled') {
-    for (const kb of bases.value) {
-      hits.push({
-        key: `kb-${kb.id}`, group: '知识库', title: kb.name,
-        subtitle: kb.originalFilename || kb.category || '',
-        path: '/knowledgebase',
       });
     }
   }
@@ -151,7 +140,7 @@ export function GlobalSearch() {
                 ref={inputRef}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索简历、在线文档、知识库、面试记录…"
+                placeholder="搜索简历、在线文档、面试记录…"
                 className="flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
               />
               <button
@@ -172,7 +161,7 @@ export function GlobalSearch() {
                   <Skeleton className="h-10 w-full" />
                 </div>
               ) : filtered.length === 0 ? (
-                <EmptyState compact title="没有匹配结果" description="换个关键词试试，或先上传一份简历 / 知识库" />
+                <EmptyState compact title="没有匹配结果" description="换个关键词试试，或先上传一份简历" />
               ) : (
                 GROUP_ORDER.map((group) => {
                   const items = filtered.filter((hit) => hit.group === group);

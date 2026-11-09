@@ -5,8 +5,7 @@ import lombok.Data;
 import java.time.Duration;
 
 /**
- * 卡住任务恢复调度配置（P1-07）。两个前缀共用同一结构：
- * {@code app.async.recovery.vectorize} 与 {@code app.async.recovery.resume-analyze}。
+ * 卡住任务恢复调度配置（P1-07）。前缀为 {@code app.async.recovery.resume-analyze}。
  *
  * <p>注意：pending 阈值必须大于正常排队等待时间（消费者单线程，多个大文件排队
  * 十分钟以上是正常现象）。processing 阈值需要覆盖两次业务心跳之间的最长耗时，
@@ -32,7 +31,7 @@ public abstract class AsyncTaskRecoveryProperties {
     private Duration processingThreshold = Duration.ofMinutes(15);
 
     /**
-     * Embedding/LLM 阶段心跳节流间隔。
+     * LLM 阶段心跳节流间隔。
      */
     private Duration heartbeatThrottle = Duration.ofSeconds(30);
 

@@ -33,7 +33,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
@@ -152,7 +151,7 @@ class LlmProviderConfigServiceTest {
         @DisplayName("createProvider 对重复 id 抛出异常")
         void createProviderThrowsForDuplicateId() {
             Map<String, LlmProviderProperties.ProviderConfig> providers = new HashMap<>();
-            providers.put("existing", createProviderConfig("http://localhost:1234", "key", "model", null));
+            providers.put("existing", createProviderConfig("http://localhost:1234", "key", "model"));
             when(properties.getProviders()).thenReturn(providers);
 
             CreateProviderRequest request = new CreateProviderRequest(
@@ -160,7 +159,6 @@ class LlmProviderConfigServiceTest {
                 "http://localhost:1234",
                 "key",
                 "model",
-                null,
                 null
             );
 
@@ -176,63 +174,25 @@ class LlmProviderConfigServiceTest {
         }
 
         @Test
-        @DisplayName("updateProvider 允许清空 embedding model")
-        void updateProviderAllowsClearingEmbeddingModel() {
-            Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
-            LlmProviderProperties.ProviderConfig config = createProviderConfig(
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "secret",
-                "qwen-plus",
-                "text-embedding-v3"
-            );
-            providers.put("dashscope", config);
-            when(properties.getProviders()).thenReturn(providers);
-
-            service.updateProvider("dashscope", new UpdateProviderRequest(null, null, null, "", null));
-
-            assertNull(config.getEmbeddingModel());
-            verify(registry).reload();
-        }
-
-        @Test
-        @DisplayName("updateProvider 对纯空白 embedding model 等价于清空")
-        void updateProviderTreatsBlankEmbeddingModelAsClear() {
-            Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
-            LlmProviderProperties.ProviderConfig config = createProviderConfig(
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                "secret",
-                "qwen-plus",
-                "text-embedding-v3"
-            );
-            providers.put("dashscope", config);
-            when(properties.getProviders()).thenReturn(providers);
-
-            service.updateProvider("dashscope", new UpdateProviderRequest(null, null, null, "   ", null));
-
-            assertNull(config.getEmbeddingModel());
-            verify(registry).reload();
-        }
-
-        @Test
         @DisplayName("updateProvider 拒绝空串 baseUrl / model / apiKey")
         void updateProviderRejectsBlankRequiredFields() {
             Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
             providers.put("dashscope",
-                createProviderConfig("https://dashscope.aliyuncs.com", "secret", "qwen-plus", null));
+                createProviderConfig("https://dashscope.aliyuncs.com", "secret", "qwen-plus"));
             when(properties.getProviders()).thenReturn(providers);
 
             assertThrows(BusinessException.class, () ->
                 service.updateProvider("dashscope",
-                    new UpdateProviderRequest("", null, null, null, null)));
+                    new UpdateProviderRequest("", null, null, null)));
             assertThrows(BusinessException.class, () ->
                 service.updateProvider("dashscope",
-                    new UpdateProviderRequest("   ", null, null, null, null)));
+                    new UpdateProviderRequest("   ", null, null, null)));
             assertThrows(BusinessException.class, () ->
                 service.updateProvider("dashscope",
-                    new UpdateProviderRequest(null, null, "", null, null)));
+                    new UpdateProviderRequest(null, null, "", null)));
             assertThrows(BusinessException.class, () ->
                 service.updateProvider("dashscope",
-                    new UpdateProviderRequest(null, "  ", null, null, null)));
+                    new UpdateProviderRequest(null, "  ", null, null)));
         }
     }
 
@@ -244,7 +204,7 @@ class LlmProviderConfigServiceTest {
         @DisplayName("updateDefaultProvider 拒绝未知 provider")
         void updateDefaultProviderRejectsUnknownProvider() {
             Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
-            providers.put("dashscope", createProviderConfig("https://dashscope.aliyuncs.com", "key", "qwen", null));
+            providers.put("dashscope", createProviderConfig("https://dashscope.aliyuncs.com", "key", "qwen"));
             when(properties.getProviders()).thenReturn(providers);
 
             BusinessException exception = assertThrows(
@@ -261,8 +221,8 @@ class LlmProviderConfigServiceTest {
         @DisplayName("updateDefaultProvider 写入新的默认 provider")
         void updateDefaultProviderPersistsValue() {
             Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
-            providers.put("dashscope", createProviderConfig("https://dashscope.aliyuncs.com", "key", "qwen", null));
-            providers.put("glm", createProviderConfig("https://open.bigmodel.cn/api/coding/paas/v4", "key", "glm-4-flash", null));
+            providers.put("dashscope", createProviderConfig("https://dashscope.aliyuncs.com", "key", "qwen"));
+            providers.put("glm", createProviderConfig("https://open.bigmodel.cn/api/coding/paas/v4", "key", "glm-4-flash"));
             when(properties.getProviders()).thenReturn(providers);
 
             service.updateDefaultProvider(new DefaultProviderDTO("glm"));
@@ -334,7 +294,7 @@ class LlmProviderConfigServiceTest {
                 properties, registry, voiceProperties, asrService, ttsService);
 
             assertDoesNotThrow(() -> nullEnvService.createProvider(
-                new CreateProviderRequest("test", "http://localhost", "key", "model", null, null)));
+                new CreateProviderRequest("test", "http://localhost", "key", "model", null)));
         }
 
         @Test
@@ -369,7 +329,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getProviders()).thenReturn(new HashMap<>());
 
             yamlService.createProvider(
-                new CreateProviderRequest("kimi", "https://api.moonshot.cn/v1", "key", "kimi-latest", null, null));
+                new CreateProviderRequest("kimi", "https://api.moonshot.cn/v1", "key", "kimi-latest", null));
 
             assertTrue(Files.exists(yamlFile));
             String content = Files.readString(yamlFile, StandardCharsets.UTF_8);
@@ -400,7 +360,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getProviders()).thenReturn(new HashMap<>());
 
             yamlService.createProvider(
-                new CreateProviderRequest("kimi", "https://api.moonshot.cn/v1", "key", "kimi-latest", null, null));
+                new CreateProviderRequest("kimi", "https://api.moonshot.cn/v1", "key", "kimi-latest", null));
 
             String content = Files.readString(yamlFile, StandardCharsets.UTF_8);
             assertTrue(content.contains("default-provider"));
@@ -418,21 +378,19 @@ class LlmProviderConfigServiceTest {
                 properties, registry, voiceProperties, asrService, ttsService);
 
             assertDoesNotThrow(() -> nullYamlService.createProvider(
-                new CreateProviderRequest("test", "http://localhost", "key", "model", null, null)));
+                new CreateProviderRequest("test", "http://localhost", "key", "model", null)));
         }
     }
 
     private LlmProviderProperties.ProviderConfig createProviderConfig(
         String baseUrl,
         String apiKey,
-        String model,
-        String embeddingModel
+        String model
     ) {
         LlmProviderProperties.ProviderConfig config = new LlmProviderProperties.ProviderConfig();
         config.setBaseUrl(baseUrl);
         config.setApiKey(apiKey);
         config.setModel(model);
-        config.setEmbeddingModel(embeddingModel);
         return config;
     }
 

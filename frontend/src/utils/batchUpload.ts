@@ -6,12 +6,6 @@ export const UPLOAD_START_INTERVAL_MS = 500;
 export const UPLOAD_RETRY_COOLDOWN_MS = 2000;
 export const STATUS_POLL_INTERVAL_MS = 5000;
 
-export const KNOWLEDGE_BASE_FILE_POLICY: FileUploadPolicy = {
-  extensions: ['pdf', 'doc', 'docx', 'txt', 'md'],
-  maxFileSize: 50 * 1024 * 1024,
-  maxSizeLabel: '50MB',
-  formatLabel: 'PDF、DOCX、DOC、TXT、MD',
-};
 export const RESUME_FILE_POLICY: FileUploadPolicy = {
   extensions: ['pdf', 'doc', 'docx', 'txt'],
   maxFileSize: 10 * 1024 * 1024,

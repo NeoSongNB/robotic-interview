@@ -23,7 +23,7 @@ export const userCredentialApi = {
     return request.get<ProviderPreset[]>('/api/me/ai-credentials/providers');
   },
 
-  /** Chat / Embedding / 语音能力就绪状态 */
+  /** Chat / 语音能力就绪状态 */
   status(): Promise<CredentialStatus> {
     return request.get<CredentialStatus>('/api/me/ai-credentials/status');
   },

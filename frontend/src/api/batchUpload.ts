@@ -1,27 +1,7 @@
-import { knowledgeBaseApi } from './knowledgebase';
 import { resumeApi } from './resume';
 import { historyApi } from './history';
 import type { BatchUploadAdapter } from '../types/batchUpload';
 import { getUploadOutcome, normalizeProcessingStatus } from '../utils/batchUpload';
-
-export const knowledgeBaseUploadAdapter: BatchUploadAdapter = {
-  processLabel: '向量化',
-  async upload(file, customName) {
-    const result = await knowledgeBaseApi.uploadKnowledgeBase(file, customName);
-    if (!result.knowledgeBase?.id) throw new Error('上传结果缺少知识库 ID，请重试');
-    return {
-      entityId: result.knowledgeBase.id,
-      duplicate: result.duplicate,
-      ...getUploadOutcome(normalizeProcessingStatus(result.knowledgeBase.vectorStatus),
-        result.enqueueAccepted, result.message, '向量化'),
-    };
-  },
-  async getStatus(id, signal) {
-    const result = await knowledgeBaseApi.getKnowledgeBase(id, signal);
-    return { id: result.id, status: result.vectorStatus, error: result.vectorError };
-  },
-  retry: id => knowledgeBaseApi.revectorize(id),
-};
 
 export const resumeUploadAdapter: BatchUploadAdapter = {
   processLabel: '分析',

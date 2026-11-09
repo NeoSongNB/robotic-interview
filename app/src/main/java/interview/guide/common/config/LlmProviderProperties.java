@@ -12,8 +12,6 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "app.ai")
 public class LlmProviderProperties {
     private String defaultProvider = "dashscope";
-    private String defaultEmbeddingProvider;
-    private Integer embeddingDimensions = 1024;
     private Map<String, ProviderConfig> providers;
     private AdvisorConfig advisors = new AdvisorConfig();
     private String configYamlPath;
@@ -33,9 +31,6 @@ public class LlmProviderProperties {
         private String baseUrl;
         private String apiKey;
         private String model;
-        private String embeddingModel;
-        private Integer embeddingDimensions;
-        private Boolean supportsEmbedding;
         private Double temperature;
     }
 

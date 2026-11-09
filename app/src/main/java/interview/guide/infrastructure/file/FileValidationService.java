@@ -22,7 +22,7 @@ public class FileValidationService {
      *
      * @param file 上传的文件
      * @param maxSizeBytes 最大文件大小（字节）
-     * @param fileTypeName 文件类型名称（用于错误消息，如"简历"、"知识库"）
+     * @param fileTypeName 文件类型名称（用于错误消息，如"简历"）
      */
     public void validateFile(MultipartFile file, long maxSizeBytes, String fileTypeName) {
         if (file.isEmpty()) {
@@ -106,23 +106,5 @@ public class FileValidationService {
                lowerFileName.endsWith(".mdown");
     }
     
-    /**
-     * 检查MIME类型是否为知识库支持的格式
-     */
-    public boolean isKnowledgeBaseMimeType(String contentType) {
-        if (contentType == null) {
-            return false;
-        }
-        
-        String lowerContentType = contentType.toLowerCase();
-        return lowerContentType.contains("pdf") ||
-               lowerContentType.contains("msword") ||
-               lowerContentType.contains("wordprocessingml") ||
-               lowerContentType.contains("text/plain") ||
-               lowerContentType.contains("text/markdown") ||
-               lowerContentType.contains("text/x-markdown") ||
-               lowerContentType.contains("text/x-web-markdown") ||
-               lowerContentType.contains("application/rtf");
-    }
 }
 

@@ -51,13 +51,6 @@ public enum ErrorCode {
     // ========== 导出模块错误 5xxx ==========
     EXPORT_PDF_FAILED(5001, "PDF导出失败"),
     
-    // ========== 知识库模块错误 6xxx ==========
-    KNOWLEDGE_BASE_NOT_FOUND(6001, "知识库不存在"),
-    KNOWLEDGE_BASE_PARSE_FAILED(6002, "知识库文件解析失败"),
-    KNOWLEDGE_BASE_QUERY_FAILED(6004, "知识库查询失败"),
-    KNOWLEDGE_BASE_DELETE_FAILED(6005, "知识库删除失败"),
-    KNOWLEDGE_BASE_VECTORIZATION_FAILED(6006, "知识库向量化失败"),
-    
     // ========== AI服务错误 7xxx ==========
     AI_SERVICE_UNAVAILABLE(7001, "AI服务暂时不可用，请稍后重试"),
     AI_SERVICE_TIMEOUT(7002, "AI服务响应超时"),
@@ -103,12 +96,10 @@ public enum ErrorCode {
     USER_CREDENTIAL_BASEURL_NOT_ALLOWED(13004, "自定义服务地址不被允许"),
     USER_CREDENTIAL_ENCRYPTION_FAILED(13005, "凭据加密失败"),
     USER_CREDENTIAL_DECRYPTION_FAILED(13006, "凭据解密失败，请重新配置"),
-    EMBEDDING_CREDENTIAL_NOT_CONFIGURED(13007, "尚未配置 Embedding 模型 API Key（知识库向量化需要 DashScope 凭证），请前往设置页配置"),
     USER_CREDENTIAL_MODEL_NOT_ALLOWED(13008, "该供应商不支持所选模型"),
     PROVIDER_AUTHENTICATION_FAILED(13009, "模型供应商认证失败，请检查 API Key 是否正确或已过期"),
     USER_CREDENTIAL_TEST_FAILED(13010, "模型连接测试失败"),
     AI_CONTEXT_USER_UNAVAILABLE(13011, "无法确定该请求所属用户，已拒绝使用平台默认凭证"),
-    EMBEDDING_MODEL_MISMATCH(13012, "知识库向量与当前 Embedding 模型不一致，请重新向量化后再检索"),
 
     // ========== 平台级 AI 能力开关 14xxx ==========
     AI_PLATFORM_KEY_DISABLED(14001, "该 AI 功能正在改造中，暂不可用，请先在设置页配置自己的模型凭证");

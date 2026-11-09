@@ -8,10 +8,6 @@ public record ProviderDTO(
     String baseUrl,
     String maskedApiKey,
     String model,
-    String embeddingModel,
-    Integer embeddingDimensions,
-    boolean supportsEmbedding,
     Double temperature,
-    boolean defaultChatProvider,
-    boolean defaultEmbeddingProvider
+    boolean defaultChatProvider
 ) {}

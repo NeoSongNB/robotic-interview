@@ -99,8 +99,6 @@ class InterviewSessionIdempotencyTest {
         existingSessionId,
         "",
         null,
-        null,
-        null,
         List.of(question),
         0,
         SessionStatus.CREATED,

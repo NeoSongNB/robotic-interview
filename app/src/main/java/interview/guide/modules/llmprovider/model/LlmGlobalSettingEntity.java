@@ -28,9 +28,6 @@ public class LlmGlobalSettingEntity {
   @Column(name = "default_chat_provider_id", nullable = false, length = 64)
   private String defaultChatProviderId;
 
-  @Column(name = "default_embedding_provider_id", nullable = false, length = 64)
-  private String defaultEmbeddingProviderId;
-
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 

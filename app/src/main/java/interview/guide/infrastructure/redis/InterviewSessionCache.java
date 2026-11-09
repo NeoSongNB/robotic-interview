@@ -52,8 +52,6 @@ public class InterviewSessionCache {
         private String sessionId;
         private String resumeText;
         private Long resumeId;
-        private Long knowledgeBaseId;
-        private String interviewCategory;
         private String questionsJson;  // 序列化的问题列表
         private int currentIndex;
         private SessionStatus status;
@@ -61,15 +59,12 @@ public class InterviewSessionCache {
         public CachedSession() {
         }
 
-        public CachedSession(String sessionId, String resumeText, Long resumeId, Long knowledgeBaseId,
-                            String interviewCategory,
+        public CachedSession(String sessionId, String resumeText, Long resumeId,
                             List<InterviewQuestionDTO> questions, int currentIndex,
                             SessionStatus status, ObjectMapper objectMapper) {
             this.sessionId = sessionId;
             this.resumeText = resumeText;
             this.resumeId = resumeId;
-            this.knowledgeBaseId = knowledgeBaseId;
-            this.interviewCategory = interviewCategory;
             this.currentIndex = currentIndex;
             this.status = status;
             try {
@@ -91,14 +86,12 @@ public class InterviewSessionCache {
     /**
      * 保存会话到缓存
      */
-    public void saveSession(String sessionId, String resumeText, Long resumeId, Long knowledgeBaseId,
-                           String interviewCategory,
+    public void saveSession(String sessionId, String resumeText, Long resumeId,
                            List<InterviewQuestionDTO> questions, int currentIndex,
                            SessionStatus status) {
         String key = buildSessionKey(sessionId);
         CachedSession cachedSession = new CachedSession(
-            sessionId, resumeText, resumeId, knowledgeBaseId, interviewCategory,
-            questions, currentIndex, status, objectMapper
+            sessionId, resumeText, resumeId, questions, currentIndex, status, objectMapper
         );
 
         redisService.set(key, cachedSession, SESSION_TTL);
@@ -108,8 +101,8 @@ public class InterviewSessionCache {
             saveResumeSessionMapping(resumeId, sessionId);
         }
 
-        log.debug("会话已缓存: sessionId={}, resumeId={}, kbId={}, status={}",
-            sessionId, resumeId, knowledgeBaseId, status);
+        log.debug("会话已缓存: sessionId={}, resumeId={}, status={}",
+            sessionId, resumeId, status);
     }
 
     /**

@@ -15,7 +15,6 @@ public record InterviewDetailDTO(
     String evaluateError,
     Integer overallScore,
     String sourceType,
-    Long knowledgeBaseId,
     String overallFeedback,
     LocalDateTime createdAt,
     LocalDateTime completedAt,

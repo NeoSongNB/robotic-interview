@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
  * @param keyTail          明文末尾 4 位，仅用于脱敏展示
  * @param updatedAt        最后更新时间
  * @param chatEnabled      该凭证可用于 Chat
- * @param embeddingEnabled 该凭证可用于 Embedding（知识库向量化/检索）
  */
 public record UserCredentialDTO(
     String providerKey,
@@ -22,10 +21,9 @@ public record UserCredentialDTO(
     String modelName,
     String keyTail,
     LocalDateTime updatedAt,
-    boolean chatEnabled,
-    boolean embeddingEnabled
+    boolean chatEnabled
 ) {
     public static UserCredentialDTO notConfigured(String providerKey) {
-        return new UserCredentialDTO(providerKey, false, null, null, null, false, false);
+        return new UserCredentialDTO(providerKey, false, null, null, null, false);
     }
 }
