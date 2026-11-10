@@ -10,6 +10,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,5 +59,21 @@ class InterviewSkillRemovalTest {
         .doesNotContain("ali-backend", "加载该技能");
     assertThat(prompts.generateSystemPromptWithContext("algorithm", null))
         .contains("command: algorithm");
+  }
+
+  @Test
+  @DisplayName("下线预设后共享参考仍可用于自定义 JD 方向")
+  void keepsSharedReferencesForCustomJd() {
+    var custom = skills.buildCustomSkill(List.of(
+        new InterviewSkillService.CategoryDTO("MQ", "消息队列", "NORMAL", "wrong.md", true),
+        new InterviewSkillService.CategoryDTO("DB_DESIGN", "数据库设计", "CORE", null, true),
+        new InterviewSkillService.CategoryDTO("NET_OS", "计网与操作系统", "CORE", null, true)),
+        "示例 JD");
+    assertThat(custom.categories())
+        .extracting(InterviewSkillService.SkillCategoryDTO::ref)
+        .containsExactly("mq.md", "db-design.md", "network-os.md");
+
+    String catalog = (String) ReflectionTestUtils.getField(skills, "cachedReferenceFileList");
+    assertThat(catalog).contains("db-design.md", "network-os.md", "mq.md");
   }
 }

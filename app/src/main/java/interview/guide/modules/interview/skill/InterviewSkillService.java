@@ -57,6 +57,12 @@ public class InterviewSkillService {
     private static final int MAX_EVALUATION_REFERENCE_SECTION_CHARS = 6000;
     private static final int MAX_SINGLE_REFERENCE_CHARS = 3000;
 
+    /** 平台内置共享参考：与具体预设解耦，避免下线某个预设时连带丢失 JD 解析候选。 */
+    private static final List<InterviewSkillProperties.CategoryDef> SHARED_REFERENCE_CATEGORIES = List.of(
+        new InterviewSkillProperties.CategoryDef("DB_DESIGN", "数据库设计", "CORE", "db-design.md", true),
+        new InterviewSkillProperties.CategoryDef("NET_OS", "计网与操作系统", "CORE", "network-os.md", true),
+        new InterviewSkillProperties.CategoryDef("MQ", "消息队列", "NORMAL", "mq.md", true));
+
     private final LlmProviderRegistry llmProviderRegistry;
     private final UserCredentialService userCredentialService;
     private final StructuredOutputInvoker structuredOutputInvoker;
@@ -132,6 +138,10 @@ public class InterviewSkillService {
                         new RefMapping(cat.getRef(), Boolean.TRUE.equals(cat.getShared()), entry.getKey()));
                 }
             }
+        }
+        for (InterviewSkillProperties.CategoryDef cat : SHARED_REFERENCE_CATEGORIES) {
+            categoryRefIndex.putIfAbsent(cat.getKey(),
+                new RefMapping(cat.getRef(), Boolean.TRUE.equals(cat.getShared()), "_shared"));
         }
         log.info("构建 category→reference 映射: {} 个条目", categoryRefIndex.size());
     }
@@ -240,6 +250,10 @@ public class InterviewSkillService {
                             + " | " + cat.getLabel() + " |\n");
                 }
             }
+        }
+        for (InterviewSkillProperties.CategoryDef cat : SHARED_REFERENCE_CATEGORIES) {
+            refDescriptions.putIfAbsent(cat.getRef(),
+                "| " + cat.getRef() + " | shared | 共享 | " + cat.getLabel() + " |\n");
         }
 
         if (refDescriptions.isEmpty()) {
