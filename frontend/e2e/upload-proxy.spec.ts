@@ -72,6 +72,19 @@ test('后端返回非 Result 的 403 时，上传页面显示拒绝原因', asyn
 });
 
 test('后端未启动时，上传页面显示服务连接失败的明确原因', async ({ page }) => {
+  // 上游关闭后认证接口也会断开，单独模拟登录态，让上传请求仍走真实代理。
+  await page.route('**/api/auth/csrf', route => route.fulfill({
+    json: { code: 200, message: 'success', data: null },
+  }));
+  await page.route('**/api/auth/me', route => route.fulfill({
+    json: {
+      code: 200, message: 'success',
+      data: {
+        id: 1, username: 'tester', email: null, role: 'USER', status: 'ACTIVE',
+        createdAt: null, lastLoginAt: null,
+      },
+    },
+  }));
   await new Promise<void>(resolve => upstream.close(() => resolve()));
   await page.goto(baseURL + '/upload');
   await page.locator('input[type=file]').setInputFiles({
