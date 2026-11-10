@@ -80,7 +80,7 @@ public class CredentialConnectionTestService {
         long start = System.nanoTime();
         try {
             ChatClient client = llmProviderRegistry.buildEphemeralChatClient(
-                secret.baseUrl(), secret.apiKey(), secret.modelName());
+                secret.providerKey(), secret.baseUrl(), secret.apiKey(), secret.modelName());
             String reply = client.prompt().user(PROBE_PROMPT).call().content();
             long latency = (System.nanoTime() - start) / 1_000_000;
             if (reply == null) {

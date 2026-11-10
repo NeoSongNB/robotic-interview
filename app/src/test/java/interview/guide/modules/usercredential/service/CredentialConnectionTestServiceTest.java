@@ -52,7 +52,7 @@ class CredentialConnectionTestServiceTest {
     when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
     ChatClient client = mockChatClientReturning("OK");
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenReturn(client);
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -69,7 +69,7 @@ class CredentialConnectionTestServiceTest {
   void authFailureIsClassifiedAndRedacted() {
     when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenThrow(new IllegalStateException("401 Unauthorized: invalid api key " + API_KEY));
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -86,7 +86,7 @@ class CredentialConnectionTestServiceTest {
   void genericErrorIsRedacted() {
     when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenThrow(new IllegalStateException("connect failed with token sk-abcdefghijklmnop"));
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -119,7 +119,7 @@ class CredentialConnectionTestServiceTest {
       when(userCredentialService.openTransientSecret(eq(PROVIDER), eq(API_KEY)))
           .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 0L));
       ChatClient client = mockChatClientReturning("OK");
-      when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+      when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
           .thenReturn(client);
 
       CredentialTestResultDTO result = service.testTransient(USER_ID,

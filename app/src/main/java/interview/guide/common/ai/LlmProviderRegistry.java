@@ -150,10 +150,10 @@ public class LlmProviderRegistry {
      *
      * <p>不进缓存、不落日志；调用方必须保证 apiKey 只存在于本次栈帧中。</p>
      */
-    public ChatClient buildEphemeralChatClient(String baseUrl, String apiKey, String modelName) {
+    public ChatClient buildEphemeralChatClient(String providerKey, String baseUrl, String apiKey, String modelName) {
         OpenAiChatOptions options = OpenAiChatOptions.builder()
             .model(modelName)
-            .temperature(0.0)
+            .temperature(resolveTemperature(providerKey, 0.0))
             .build();
         OpenAIClient openAiClient = ApiPathResolver.buildOpenAiClient(baseUrl, apiKey, 8000, 30000);
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
@@ -271,7 +271,7 @@ public class LlmProviderRegistry {
         OpenAIClient openAiClient = ApiPathResolver.buildOpenAiClient(secret.baseUrl(), secret.apiKey());
         OpenAiChatOptions options = OpenAiChatOptions.builder()
             .model(model)
-            .temperature(resolveTemperature(context.providerKey()))
+            .temperature(resolveTemperature(context.providerKey(), 0.2))
             .build();
         return OpenAiChatModel.builder()
             .openAiClient(openAiClient)
@@ -281,10 +281,10 @@ public class LlmProviderRegistry {
             .build();
     }
 
-    private Double resolveTemperature(String providerKey) {
+    private Double resolveTemperature(String providerKey, double fallback) {
         ProviderConfig config = providerConfig(providerKey);
         Double configured = config == null ? null : config.getTemperature();
-        return configured != null ? configured : 0.2;
+        return configured != null ? configured : fallback;
     }
 
     private ProviderConfig providerConfig(String providerKey) {
