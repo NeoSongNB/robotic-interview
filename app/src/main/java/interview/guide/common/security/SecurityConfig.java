@@ -26,7 +26,6 @@ import java.time.Duration;
  *   <li>JWT 默认放在 HttpOnly + SameSite Cookie，前端 JS 不可读取，规避 XSS 窃取。</li>
  *   <li>启用 CSRF 双提交 Cookie 防护：令牌写入非 HttpOnly 的 XSRF-TOKEN Cookie，
  *       前端 axios 默认自动回写 X-XSRF-TOKEN 头。</li>
- *   <li>管理员专属接口 {@code /api/llm-provider/**} 通过角色约束，普通用户不可访问。</li>
  * </ul>
  */
 @Configuration
@@ -90,8 +89,6 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(PUBLIC_PATHS).permitAll()
-                // 平台级 Provider 管理仅限管理员，普通用户改用自己的 /api/me/ai-credentials
-                .requestMatchers("/api/llm-provider/**").hasRole(AuthenticatedUser.ROLE_ADMIN)
                 .requestMatchers("/api/me/**").authenticated()
                 .requestMatchers("/api/**").authenticated()
                 .requestMatchers("/ws/**").authenticated()

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Clock, PhoneOff, AlertCircle, Bot, Mic, ArrowLeft, SendHorizonal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioRecorder from '../components/AudioRecorder';
@@ -21,7 +21,6 @@ type VoiceConfig = {
   hrEnabled: boolean;
   plannedDuration: number;
   resumeId?: number;
-  llmProvider?: string;
 };
 
 export default function VoiceInterviewPage() {
@@ -483,6 +482,10 @@ export default function VoiceInterviewPage() {
         }
         return;
       }
+      if (action === 'tts_unavailable' && message) {
+        setError(message);
+        return;
+      }
       if (action === 'audio_complete') {
         scheduleChunkDrainCompletion();
         return;
@@ -499,7 +502,7 @@ export default function VoiceInterviewPage() {
     },
     onErrorMessage: (message: string) => {
       setError(message || '语音面试服务异常，请稍后重试');
-      if (message.includes('语音识别')) {
+      if (message.includes('语音识别') || message.includes('语音转写')) {
         setIsAsrReady(false);
       }
     },
@@ -536,7 +539,6 @@ export default function VoiceInterviewPage() {
     hrEnabled: boolean;
     plannedDuration: number;
     resumeId?: number;
-    llmProvider?: string;
   }) => {
     setError(null);
     setConnectionStatus('connecting');
@@ -552,7 +554,6 @@ export default function VoiceInterviewPage() {
         hrEnabled: config.hrEnabled,
         plannedDuration: config.plannedDuration,
         resumeId: config.resumeId,
-        llmProvider: config.llmProvider,
       });
 
       setSessionId(session.sessionId);
@@ -640,7 +641,6 @@ export default function VoiceInterviewPage() {
         hrEnabled: presetVoiceConfig.hrEnabled,
         plannedDuration: presetVoiceConfig.plannedDuration,
         resumeId: presetVoiceConfig.resumeId,
-        llmProvider: presetVoiceConfig.llmProvider,
       });
     } else if (resumeSessionId) {
       autoStartRef.current = true;
@@ -778,7 +778,12 @@ export default function VoiceInterviewPage() {
         {error && (
           <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 px-4 py-3 rounded-xl flex items-center gap-2">
             <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{error}</span>
+            <span className="text-sm">{error}
+              {(error.includes('模型') || error.includes('设置')) && (
+                <> <Link className="underline" to="/settings">前往设置</Link>
+                   {' · '}<Link className="underline" to="/interview-hub">返回选择文字面试</Link></>
+              )}
+            </span>
           </div>
         )}
 

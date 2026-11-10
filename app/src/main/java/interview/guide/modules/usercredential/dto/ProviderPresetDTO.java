@@ -1,5 +1,7 @@
 package interview.guide.modules.usercredential.dto;
 
+import interview.guide.modules.usercredential.model.AiCapability;
+
 /**
  * 可供用户选择的供应商预设。
  *
@@ -10,6 +12,7 @@ public record ProviderPresetDTO(
     String displayName,
     String baseUrl,
     String defaultModel,
-    boolean configured
+    boolean configured,
+    AiCapability capability
 ) {
 }

@@ -123,6 +123,10 @@ public class QwenTtsService {
      * @return PCM audio data at configured sample rate, or empty array if synthesis fails
      */
     public byte[] synthesize(String text, String userApiKey) {
+        return synthesize(text, userApiKey, model);
+    }
+
+    public byte[] synthesize(String text, String userApiKey, String modelName) {
         // Handle null, empty, or whitespace-only text
         if (text == null || text.trim().isEmpty()) {
             log.debug("Empty or null text provided, returning empty audio array");
@@ -150,7 +154,7 @@ public class QwenTtsService {
         try {
             // Build QwenTtsRealtimeParam with connection settings
             QwenTtsRealtimeParam param = QwenTtsRealtimeParam.builder()
-                    .model(model)
+                    .model(modelName)
                     .apikey(userApiKey)
                     .build();
 

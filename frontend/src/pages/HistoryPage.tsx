@@ -168,7 +168,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
   const handleExportPdf = (resumeId: number) => {
     const documentId = documentBySource.get(resumeId);
     if (!documentId) return;
-    navigate(ROUTES.resumeStudio(documentId), {state: {autoPrint: true}});
+    navigate(ROUTES.resumeStudio(documentId), {state: {autoExportPdf: true}});
   };
 
   const handleDeleteClick = (id: number, filename: string, e: React.MouseEvent) => {
@@ -420,7 +420,7 @@ export default function HistoryList({onSelectResume}: HistoryListProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate(ROUTES.resumeStudio(document.id), {state: {autoPrint: true}})}
+                    onClick={() => navigate(ROUTES.resumeStudio(document.id), {state: {autoExportPdf: true}})}
                     className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/15 rounded-lg transition-colors"
                     title="导出 PDF"
                   >

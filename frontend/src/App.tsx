@@ -85,7 +85,6 @@ interface InterviewEntryState {
     skillId?: string;
     difficulty?: Difficulty;
     questionCount?: number;
-    llmProvider?: string;
     customCategories?: CategoryDTO[];
     jdText?: string;
   };

@@ -33,7 +33,6 @@ export interface CreateInterviewRequest {
   questionCount: number;
   resumeId?: number;
   forceCreate?: boolean;
-  llmProvider?: string;
   skillId: string;
   difficulty?: string;
   customCategories?: CategoryDTO[];

@@ -79,7 +79,8 @@ class VoiceInterviewEvaluationRecoveryTest {
             voiceEvaluateStreamProducer,
             llmProviderRegistry,
             currentUserProvider,
-            skillService
+            skillService,
+            null
         );
         lenient().when(redissonClient.<VoiceInterviewSessionEntity>getBucket(anyString()))
             .thenReturn(sessionBucket);

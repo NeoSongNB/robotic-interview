@@ -177,9 +177,20 @@ public class QwenAsrService {
             Consumer<String> onPartial,
             Runnable onReady,
             Consumer<Throwable> onError) {
+        startTranscription(sessionId, userApiKey, model, onFinal, onPartial, onReady, onError);
+    }
+
+    public void startTranscription(
+            String sessionId,
+            String userApiKey,
+            String modelName,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Runnable onReady,
+            Consumer<Throwable> onError) {
         requireUserApiKey(userApiKey);
         synchronized (lockForSession(sessionId)) {
-            startTranscriptionLocked(sessionId, userApiKey, onFinal, onPartial, onReady, onError);
+            startTranscriptionLocked(sessionId, userApiKey, modelName, onFinal, onPartial, onReady, onError);
         }
     }
 
@@ -202,6 +213,17 @@ public class QwenAsrService {
             Consumer<String> onPartial,
             Runnable onReady,
             Consumer<Throwable> onError) {
+        restartTranscription(sessionId, userApiKey, model, onFinal, onPartial, onReady, onError);
+    }
+
+    public void restartTranscription(
+            String sessionId,
+            String userApiKey,
+            String modelName,
+            Consumer<String> onFinal,
+            Consumer<String> onPartial,
+            Runnable onReady,
+            Consumer<Throwable> onError) {
         requireUserApiKey(userApiKey);
         synchronized (lockForSession(sessionId)) {
             log.info("[Session: {}] Restarting DashScope ASR (stop + start)", sessionId);
@@ -211,7 +233,7 @@ public class QwenAsrService {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            startTranscriptionLocked(sessionId, userApiKey, onFinal, onPartial, onReady, onError);
+            startTranscriptionLocked(sessionId, userApiKey, modelName, onFinal, onPartial, onReady, onError);
 
             // Verify reconnection succeeded
             for (int attempt = 0; attempt < 10; attempt++) {
@@ -236,6 +258,7 @@ public class QwenAsrService {
     private void startTranscriptionLocked(
             String sessionId,
             String userApiKey,
+            String modelName,
             Consumer<String> onFinal,
             Consumer<String> onPartial,
             Runnable onReady,
@@ -247,7 +270,7 @@ public class QwenAsrService {
         try {
             // Build OmniRealtimeParam with connection settings (使用用户自己的 Key)
             OmniRealtimeParam param = OmniRealtimeParam.builder()
-                    .model(model)
+                    .model(modelName)
                     .url(url)
                     .apikey(userApiKey)
                     .build();

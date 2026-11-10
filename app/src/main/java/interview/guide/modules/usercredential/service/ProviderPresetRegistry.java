@@ -5,6 +5,7 @@ import interview.guide.common.config.LlmProviderProperties;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.modules.usercredential.dto.ProviderPresetDTO;
+import interview.guide.modules.usercredential.model.AiCapability;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,7 @@ import java.util.Set;
 public class ProviderPresetRegistry {
 
     private static final Map<String, String> DISPLAY_NAMES = Map.of(
+        "hunyuan", "腾讯混元（TokenHub）",
         "dashscope", "阿里云百炼 DashScope",
         "kimi", "月之暗面 Kimi",
         "deepseek", "DeepSeek",
@@ -40,7 +42,7 @@ public class ProviderPresetRegistry {
             return false;
         }
         String normalized = normalize(providerKey);
-        return byokProperties.getAllowedProviders() != null
+        return "hunyuan".equals(normalized) || SpeechPresets.ALL.containsKey(normalized) || byokProperties.getAllowedProviders() != null
             && byokProperties.getAllowedProviders().stream()
                 .map(this::normalize)
                 .anyMatch(normalized::equals);
@@ -56,6 +58,10 @@ public class ProviderPresetRegistry {
         if (!isAllowed(normalized)) {
             throw new BusinessException(ErrorCode.USER_CREDENTIAL_PROVIDER_NOT_ALLOWED);
         }
+        var speech = SpeechPresets.ALL.get(normalized);
+        if (speech != null) {
+            return speech.endpoint();
+        }
         Map<String, LlmProviderProperties.ProviderConfig> providers =
             llmProviderProperties.getProviders();
         LlmProviderProperties.ProviderConfig config =
@@ -67,8 +73,30 @@ public class ProviderPresetRegistry {
         return baseUrl.trim();
     }
 
+    public AiCapability capability(String providerKey) {
+        var preset = SpeechPresets.ALL.get(normalize(providerKey));
+        return preset == null ? AiCapability.TEXT : preset.capability();
+    }
+
+    public boolean supports(String providerKey, String model, AiCapability capability) {
+        if (!isAllowed(providerKey) || capability(providerKey) != capability || model == null || model.isBlank()) {
+            return false;
+        }
+        var speech = SpeechPresets.ALL.get(normalize(providerKey));
+        if (speech != null) {
+            return speech.model().equals(model);
+        }
+        var providers = llmProviderProperties.getProviders();
+        var config = providers == null ? null : providers.get(normalize(providerKey));
+        return config != null && config.getBaseUrl() != null && !config.getBaseUrl().isBlank();
+    }
+
     public String defaultModel(String providerKey) {
         String normalized = normalize(providerKey);
+        var speech = SpeechPresets.ALL.get(normalized);
+        if (speech != null) {
+            return speech.model();
+        }
         Map<String, LlmProviderProperties.ProviderConfig> providers =
             llmProviderProperties.getProviders();
         LlmProviderProperties.ProviderConfig config =
@@ -78,7 +106,8 @@ public class ProviderPresetRegistry {
 
     public String displayName(String providerKey) {
         String normalized = normalize(providerKey);
-        return DISPLAY_NAMES.getOrDefault(normalized, normalized);
+        var speech = SpeechPresets.ALL.get(normalized);
+        return speech == null ? DISPLAY_NAMES.getOrDefault(normalized, normalized) : speech.name();
     }
 
     /**
@@ -88,7 +117,10 @@ public class ProviderPresetRegistry {
      */
     public List<ProviderPresetDTO> listPresets(Set<String> configuredKeys) {
         List<ProviderPresetDTO> presets = new ArrayList<>();
-        for (String rawKey : byokProperties.getAllowedProviders()) {
+        var textKeys = new java.util.LinkedHashSet<String>();
+        textKeys.add("hunyuan");
+        textKeys.addAll(byokProperties.getAllowedProviders());
+        for (String rawKey : textKeys) {
             String key = normalize(rawKey);
             String baseUrl;
             try {
@@ -102,9 +134,12 @@ public class ProviderPresetRegistry {
                 displayName(key),
                 baseUrl,
                 defaultModel(key),
-                configuredKeys != null && configuredKeys.contains(key)
+                configuredKeys != null && configuredKeys.contains(key), capability(key)
             ));
         }
+        SpeechPresets.ALL.keySet().stream().sorted().forEach(key -> presets.add(new ProviderPresetDTO(
+            key, displayName(key), requireBaseUrl(key), defaultModel(key),
+            configuredKeys != null && configuredKeys.contains(key), capability(key))));
         return presets;
     }
 

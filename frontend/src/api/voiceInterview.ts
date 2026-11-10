@@ -14,7 +14,6 @@ export interface CreateSessionRequest {
   projectEnabled?: boolean;
   hrEnabled?: boolean;
   plannedDuration?: number;
-  llmProvider?: string;
 }
 
 export interface SessionResponse {

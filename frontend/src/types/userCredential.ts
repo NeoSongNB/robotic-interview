@@ -22,6 +22,7 @@ export interface ProviderPreset {
   /** 服务端下发，只读展示，前端不可编辑也不提交 */
   baseUrl: string;
   defaultModel: string | null;
+  capability: AiCapability;
   configured: boolean;
 }
 
@@ -74,3 +75,12 @@ export const CREDENTIAL_ERROR_CODES = {
   TEST_FAILED: 13010,
   AI_CONTEXT_USER_UNAVAILABLE: 13011,
 } as const;
+
+export type AiCapability = 'TEXT' | 'ASR' | 'TTS';
+
+export interface CapabilitySelection {
+  capability: AiCapability;
+  providerKey: string | null;
+  ready: boolean;
+  options: { providerKey: string; displayName: string; modelName: string }[];
+}

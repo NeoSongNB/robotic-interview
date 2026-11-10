@@ -5,8 +5,11 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.security.CurrentUserProvider;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.service.UserCredentialService;
 import interview.guide.common.transaction.TransactionalExecutor;
 import interview.guide.infrastructure.file.FileStorageService;
+import interview.guide.infrastructure.file.ResumeOcrService;
 import interview.guide.infrastructure.file.FileValidationService;
 import interview.guide.modules.interview.model.ResumeAnalysisResponse;
 import interview.guide.modules.resume.listener.AnalyzeStreamProducer;
@@ -33,6 +36,7 @@ public class ResumeUploadService {
     private final FileStorageService storageService;
     private final ResumePersistenceService persistenceService;
     private final CurrentUserProvider currentUserProvider;
+    private final UserCredentialService userCredentialService;
     private final AppConfigProperties appConfig;
     private final FileValidationService fileValidationService;
     private final AnalyzeStreamProducer analyzeStreamProducer;
@@ -70,11 +74,18 @@ public class ResumeUploadService {
             return handleDuplicateResume(existingResume.get());
         }
 
+        String textReference = userCredentialService.requireSelectedReference(
+            currentUserProvider.requireUserId(), AiCapability.TEXT);
         // 4. 解析简历文本
         long parseStart = System.currentTimeMillis();
-        String resumeText = parseService.parseResume(file);
-        if (resumeText == null || resumeText.trim().isEmpty()) {
-            throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "无法从文件中提取文本内容，请确保文件不是扫描版PDF");
+        String resumeText = ResumeOcrService.isImage(contentType) ? "" : parseService.parseResume(file);
+        boolean needsOcr = (resumeText == null || resumeText.isBlank())
+            && (ResumeOcrService.isImage(contentType) || "application/pdf".equals(contentType));
+        if (!needsOcr && (resumeText == null || resumeText.isBlank())) {
+            throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "无法从文件中提取简历文字");
+        }
+        if (needsOcr) {
+            resumeText = "";
         }
         log.info("简历文本解析完成: {} - 解析耗时: {}ms, 文本长度: {} 字符",
             fileName, System.currentTimeMillis() - parseStart, resumeText.length());
@@ -89,7 +100,7 @@ public class ResumeUploadService {
         // 6. 保存简历到数据库（状态为 PENDING）；失败时按 fileKey 补偿删除孤儿对象（简历是先解析再上传，补偿只包在 S3 成功之后）
         ResumeEntity savedResume;
         try {
-            savedResume = persistenceService.saveResume(file, resumeText, fileKey, fileUrl);
+            savedResume = persistenceService.saveResume(file, resumeText, fileKey, fileUrl, textReference);
         } catch (Exception dbError) {
             try {
                 storageService.deleteResume(fileKey);
@@ -196,11 +207,14 @@ public class ResumeUploadService {
         resumeRepository.findByIdAndUserId(resumeId, currentUserProvider.requireUserId())
             .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND, "简历不存在"));
 
+        String textReference = userCredentialService.requireSelectedReference(
+            currentUserProvider.requireUserId(), AiCapability.TEXT);
         log.info("开始重新分析简历: resumeId={}", resumeId);
 
         transactionalExecutor.run(() -> {
             ResumeEntity resume = resumeRepository.findById(resumeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND, "简历不存在"));
+            resume.setTextModelReference(textReference);
             resume.setAnalyzeStatus(AsyncTaskStatus.PENDING);
             resume.setAnalyzeError(null);
             resume.setAnalyzeAttemptId(null);

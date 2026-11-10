@@ -1,5 +1,7 @@
 import request from './request';
 import type {
+  AiCapability,
+  CapabilitySelection,
   CredentialStatus,
   CredentialTestResult,
   ProviderPreset,
@@ -15,6 +17,18 @@ import type {
  * 所有请求的 userId 都由后端从认证上下文推导，前端不传、也无法传。
  */
 export const userCredentialApi = {
+  capabilities(): Promise<CapabilitySelection[]> {
+    return request.get('/api/me/ai-credentials/capabilities');
+  },
+
+  selectCapability(capability: AiCapability, providerKey: string | null): Promise<void> {
+    return request.put(`/api/me/ai-credentials/capabilities/${capability}`, { providerKey });
+  },
+
+  reuseKey(target: string, source: string): Promise<UserCredential> {
+    return request.post('/api/me/ai-credentials/' + encodeURIComponent(target) + '/reuse-key', { providerKey: source });
+  },
+
   list(): Promise<UserCredential[]> {
     return request.get<UserCredential[]>('/api/me/ai-credentials');
   },

@@ -58,6 +58,17 @@ public class ResumeEntity {
     // 上传时间
     @Column(nullable = false)
     private LocalDateTime uploadedAt;
+
+    @Column(name = "text_model_reference", length = 128)
+    private String textModelReference;
+
+    public String getTextModelReference() {
+        return textModelReference;
+    }
+
+    public void setTextModelReference(String textModelReference) {
+        this.textModelReference = textModelReference;
+    }
     
     // 最后访问时间
     private LocalDateTime lastAccessedAt;

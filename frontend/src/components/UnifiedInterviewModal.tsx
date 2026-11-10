@@ -18,7 +18,6 @@ export interface UnifiedInterviewConfig {
   difficulty: Difficulty;
   resumeId?: number;
   resumeText?: string;
-  llmProvider: string;
   questionCount: number;
   techEnabled: boolean;
   projectEnabled: boolean;
@@ -79,7 +78,6 @@ export default function UnifiedInterviewModal({
       skillName: selectedSkill?.name || '自定义',
       difficulty: config.difficulty,
       resumeId: config.resumeId,
-      llmProvider: config.llmProvider,
       questionCount: config.questionCount,
       techEnabled: true,
       projectEnabled: true,

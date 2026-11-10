@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { type SkillDTO } from '../api/skill';
 import { userCredentialApi } from '../api/userCredential';
-import type { UserCredential } from '../types/userCredential';
+import { getErrorMessage } from '../api/request';
 import { interviewApi, type TextSessionMeta } from '../api/interview';
 import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
 import { getSkillIcon } from '../utils/skillIcons';
@@ -38,7 +38,8 @@ export default function InterviewHubPage() {
   const navigate = useNavigate();
 
   const config = useInterviewConfig({ autoLoad: false });
-  const [chatProviders, setChatProviders] = useState<(UserCredential & { displayName: string })[]>([]);
+  const [modelError, setModelError] = useState('');
+  const [checkingModels, setCheckingModels] = useState(false);
 
   // === 最近面试记录 ===
   const [recentInterviews, setRecentInterviews] = useState<RecentInterviewItem[]>([]);
@@ -92,28 +93,29 @@ export default function InterviewHubPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([userCredentialApi.list(), userCredentialApi.providers()])
-      .then(([credentials, presets]) => {
-        if (cancelled) return;
-        const names = new Map(presets.map(preset => [preset.providerKey, preset.displayName]));
-        setChatProviders(credentials
-          .filter(credential => credential.configured && credential.chatEnabled && names.has(credential.providerKey))
-          .map(credential => ({ ...credential, displayName: names.get(credential.providerKey) ?? credential.providerKey })));
-      })
-      .catch(() => {
-        // 配置列表暂不可用时，面试仍可按默认模型开始。
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  const handleStart = () => {
+  const handleStart = async () => {
     const selectedSkill = config.selectedSkill;
     const skillName = selectedSkill?.name || '自定义';
 
     if (config.isCustomStartDisabled) {
       return;
+    }
+
+    setCheckingModels(true);
+    setModelError('');
+    try {
+      const capabilities = await userCredentialApi.capabilities();
+      const textReady = capabilities.some(item => item.capability === 'TEXT' && item.ready);
+      const asrReady = capabilities.some(item => item.capability === 'ASR' && item.ready);
+      if (!textReady || (config.mode === 'voice' && !asrReady)) {
+        setModelError(!textReady ? '请先选择文本生成模型。' : '请先选择语音转写模型。你也可以切换为文字面试。');
+        return;
+      }
+    } catch (error) {
+      setModelError(getErrorMessage(error));
+      return;
+    } finally {
+      setCheckingModels(false);
     }
 
     if (config.mode === 'text') {
@@ -125,7 +127,6 @@ export default function InterviewHubPage() {
             skillName,
             difficulty: config.difficulty,
             questionCount: config.questionCount,
-            llmProvider: config.llmProvider,
             jdText: config.isCustomSkill ? config.parsedCustomJdText : undefined,
             customCategories: config.isCustomSkill ? config.customCategories : undefined,
           },
@@ -143,7 +144,6 @@ export default function InterviewHubPage() {
             hrEnabled: true,
             plannedDuration: config.plannedDuration,
             resumeId: config.resumeId,
-            llmProvider: config.llmProvider,
           },
         },
       });
@@ -405,28 +405,6 @@ export default function InterviewHubPage() {
                   </select>
                 </div>
 
-                {chatProviders.length > 0 && (
-                  <div>
-                    <label htmlFor="interview-chat-provider" className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      聊天模型
-                    </label>
-                    <select
-                      id="interview-chat-provider"
-                      value={config.llmProvider}
-                      onChange={event => config.setLlmProvider(event.target.value)}
-                      className="w-full rounded-lg border border-primary-200 bg-white px-4 py-2.5 text-sm text-slate-900
-                        focus:outline-none focus:ring-2 focus:ring-primary-500/50 dark:border-primary-700/50 dark:bg-slate-800 dark:text-white"
-                    >
-                      <option value="">自动选择</option>
-                      {chatProviders.map(provider => (
-                        <option key={provider.providerKey} value={provider.providerKey}>
-                          {provider.displayName}{provider.modelName ? ` · ${provider.modelName}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
                 {/* 文字面试 - 题目数 */}
                 {config.mode === 'text' && (
                   <div>
@@ -483,11 +461,21 @@ export default function InterviewHubPage() {
 
         {/* 开始面试按钮 */}
         <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700">
+          {modelError && (
+            <p role="alert" className="mb-3 text-sm text-amber-600 dark:text-amber-400">
+              {modelError} <Link to={ROUTES.settings} className="underline">前往设置</Link>
+              {config.mode === 'voice' && (
+                <button className="ml-3 underline" onClick={() => { config.setMode('text'); setModelError(''); }}>
+                  切换文字面试
+                </button>
+              )}
+            </p>
+          )}
           <motion.button
             onClick={handleStart}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            disabled={config.isCustomStartDisabled}
+            disabled={config.isCustomStartDisabled || checkingModels}
             className="btn-primary w-full px-6 py-3 rounded-xl font-semibold text-sm
               disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >

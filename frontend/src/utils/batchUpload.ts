@@ -7,10 +7,10 @@ export const UPLOAD_RETRY_COOLDOWN_MS = 2000;
 export const STATUS_POLL_INTERVAL_MS = 5000;
 
 export const RESUME_FILE_POLICY: FileUploadPolicy = {
-  extensions: ['pdf', 'doc', 'docx', 'txt'],
+  extensions: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png'],
   maxFileSize: 10 * 1024 * 1024,
   maxSizeLabel: '10MB',
-  formatLabel: 'PDF、DOCX、DOC、TXT',
+  formatLabel: 'PDF、DOCX、DOC、TXT、JPG、PNG',
 };
 
 interface QueuedUploadTask {

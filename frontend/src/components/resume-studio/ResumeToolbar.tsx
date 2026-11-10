@@ -1,4 +1,4 @@
-import {ArrowLeft, Check, CircleAlert, Loader2, Printer, Save} from 'lucide-react';
+import {ArrowLeft, Check, CircleAlert, Loader2, Download, Save} from 'lucide-react';
 import type {SaveStatus} from '../../types/resumeDocument';
 
 interface ResumeToolbarProps {
@@ -8,7 +8,8 @@ interface ResumeToolbarProps {
   onSave: () => void;
   templateCode: string;
   onBack: () => void;
-  onPrint: () => void;
+  onExportPdf: () => void;
+  exportingPdf: boolean;
   busy: boolean;
   /** 有待确认的 AI 提案时冻结输入，避免自动保存与提案版本冲突。 */
   frozen?: boolean;
@@ -41,7 +42,7 @@ function StatusBadge({status}: {status: SaveStatus}) {
 
 /** 工作台顶部工具栏：返回、名称、保存状态、模板（预留扩展）、导出 PDF。 */
 export default function ResumeToolbar({
-  title, onTitleChange, saveStatus, onSave, templateCode, onBack, onPrint, busy,
+  title, onTitleChange, saveStatus, onSave, templateCode, onBack, onExportPdf, exportingPdf, busy,
   frozen = false,
 }: ResumeToolbarProps) {
   return (
@@ -86,11 +87,13 @@ export default function ResumeToolbar({
       </select>
 
       <button
-        onClick={onPrint}
-        className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm"
-        title="通过浏览器打印并选择「另存为 PDF」"
+        onClick={onExportPdf}
+        disabled={exportingPdf}
+        className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+        title="下载可选中、可搜索的 PDF"
       >
-        <Printer className="w-4 h-4"/>导出 PDF
+        {exportingPdf ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
+        {exportingPdf ? '导出中…' : '导出 PDF'}
       </button>
     </div>
   );

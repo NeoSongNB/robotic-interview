@@ -75,7 +75,8 @@ class UserCredentialServiceTest {
             new ProviderPresetRegistry(byokProperties, aiProperties);
 
         service = new UserCredentialService(
-            repository, encryptionService, presetRegistry, byokProperties, aiProperties,
+            repository, encryptionService, presetRegistry, byokProperties,
+            org.mockito.Mockito.mock(interview.guide.modules.usercredential.repository.UserCapabilityRepository.class),
             currentUserProvider, eventPublisher);
     }
 
@@ -186,7 +187,7 @@ class UserCredentialServiceTest {
         @Test
         @DisplayName("Base URL 只能来自服务端配置，用户无法指定")
         void shouldResolveBaseUrlFromServer() {
-            assertThat(service.listProviders(USER_A))
+            assertThat(service.listProviders(USER_A).stream().filter(preset -> preset.providerKey().equals("deepseek")).toList())
                 .singleElement()
                 .satisfies(preset -> {
                     assertThat(preset.providerKey()).isEqualTo("deepseek");

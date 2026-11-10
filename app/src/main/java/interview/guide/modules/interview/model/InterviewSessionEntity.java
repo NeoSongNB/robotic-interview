@@ -113,8 +113,8 @@ public class InterviewSessionEntity {
     private String evaluateError;
 
     // LLM提供商
-    @Column(length = 50)
-    private String llmProvider = "dashscope";
+    @Column(length = 128)
+    private String llmProvider;
 
     // 会话来源：NORMAL
     @Column(length = 32)

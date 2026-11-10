@@ -51,7 +51,7 @@ public class PdfExportService {
     /**
      * 使用中文字体，并为其缺少的带圈编号等字符提供内嵌回退字体。
      */
-    private void configureFonts(Document document) {
+    static void configureFonts(Document document) {
         FontProvider fontProvider = new FontProvider();
         fontProvider.setFontSelectorStrategyFactory(new BestMatchFontSelectorStrategyFactory());
         registerFont(fontProvider, "fonts/ZhuqueFangsong-Regular.ttf", "report-cjk");
@@ -60,8 +60,8 @@ public class PdfExportService {
         document.setFontFamily("report-cjk", "report-symbols");
     }
 
-    private void registerFont(FontProvider fontProvider, String resource, String alias) {
-        try (var fontStream = getClass().getClassLoader().getResourceAsStream(resource)) {
+    private static void registerFont(FontProvider fontProvider, String resource, String alias) {
+        try (var fontStream = PdfExportService.class.getClassLoader().getResourceAsStream(resource)) {
             if (fontStream != null) {
                 if (!fontProvider.getFontSet().addFont(
                         fontStream.readAllBytes(), PdfEncodings.IDENTITY_H, alias)) {

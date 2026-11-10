@@ -24,7 +24,6 @@ interface InterviewProps {
   requestId?: string;
   initialConfig?: {
     questionCount?: number;
-    llmProvider?: string;
     skillId?: string;
     difficulty?: Difficulty;
     customCategories?: CategoryDTO[];
@@ -62,7 +61,6 @@ export default function Interview({
   const startedRef = useRef(false);
 
   const questionCount = initialConfig?.questionCount ?? 8;
-  const llmProvider = initialConfig?.llmProvider ?? '';
   const skillId = initialConfig?.skillId ?? 'java-backend';
   const difficulty = initialConfig?.difficulty ?? 'mid';
   const customCategories = initialConfig?.customCategories;
@@ -92,7 +90,6 @@ export default function Interview({
         questionCount,
         resumeId,
         forceCreate: true,
-        llmProvider,
         skillId,
         difficulty,
         customCategories: skillId === CUSTOM_SKILL_ID ? customCategories : undefined,

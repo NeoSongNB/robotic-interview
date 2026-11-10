@@ -4,6 +4,9 @@ import interview.guide.common.annotation.RateLimit;
 import interview.guide.common.result.Result;
 import interview.guide.common.security.CurrentUserProvider;
 import interview.guide.modules.usercredential.dto.CredentialStatusDTO;
+import interview.guide.modules.usercredential.dto.CapabilitySelectionDTO;
+import interview.guide.modules.usercredential.dto.SelectCapabilityRequest;
+import interview.guide.modules.usercredential.model.AiCapability;
 import interview.guide.modules.usercredential.dto.CredentialTestResultDTO;
 import interview.guide.modules.usercredential.dto.ProviderPresetDTO;
 import interview.guide.modules.usercredential.dto.SaveCredentialRequest;
@@ -61,6 +64,26 @@ public class UserCredentialController {
     @GetMapping("/status")
     public Result<CredentialStatusDTO> status() {
         return Result.success(userCredentialService.status(currentUserProvider.requireUserId()));
+    }
+
+    @GetMapping("/capabilities")
+    public Result<List<CapabilitySelectionDTO>> capabilities() {
+        return Result.success(userCredentialService.capabilities(currentUserProvider.requireUserId()));
+    }
+
+    @PutMapping("/capabilities/{capability}")
+    public Result<Void> selectCapability(@PathVariable AiCapability capability,
+                                         @Valid @RequestBody SelectCapabilityRequest request) {
+        userCredentialService.selectCapability(currentUserProvider.requireUserId(), capability, request.providerKey());
+        return Result.success("模型选择已保存", null);
+    }
+
+    @PostMapping("/{targetProvider}/reuse-key")
+    @RateLimit(dimension = RateLimit.Dimension.USER, count = 20, interval = 1, timeUnit = RateLimit.TimeUnit.MINUTES)
+    public Result<UserCredentialDTO> reuseKey(@PathVariable String targetProvider,
+                                              @Valid @RequestBody SelectCapabilityRequest request) {
+        return Result.success(userCredentialService.reuseKey(
+            currentUserProvider.requireUserId(), targetProvider, request.providerKey()));
     }
 
     /** 查询指定供应商的配置状态（脱敏）。 */

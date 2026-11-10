@@ -15,7 +15,6 @@ export const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: strin
 
 export const CUSTOM_SKILL_ID = 'custom';
 export const DEFAULT_SKILL_ID = 'java-backend';
-export const DEFAULT_LLM_PROVIDER = '';
 export const MIN_JD_LENGTH = 50;
 
 export interface InterviewConfigState {
@@ -27,7 +26,6 @@ export interface InterviewConfigState {
   showMore: boolean;
   resumeId: number | undefined;
   resumes: ResumeListItem[];
-  llmProvider: string;
   questionCount: number;
   plannedDuration: number;
   customJdText: string;
@@ -55,7 +53,6 @@ export function useInterviewConfig(options?: {
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [questionCount, setQuestionCount] = useState<number>(6);
   const [plannedDuration, setPlannedDuration] = useState(30);
-  const [llmProvider, setLlmProvider] = useState(DEFAULT_LLM_PROVIDER);
   const [customJdText, setCustomJdText] = useState('');
   const [parsedCustomJdText, setParsedCustomJdText] = useState('');
   const [customCategories, setCustomCategories] = useState<CategoryDTO[]>([]);
@@ -131,7 +128,6 @@ export function useInterviewConfig(options?: {
     resumes,
     questionCount, setQuestionCount,
     plannedDuration, setPlannedDuration,
-    llmProvider, setLlmProvider,
     customJdText, setCustomJdText,
     parsedCustomJdText,
     customCategories,
