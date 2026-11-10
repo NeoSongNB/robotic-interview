@@ -125,7 +125,7 @@ app:
     # ===== BYOK：用户自带密钥 =====
     byok:
       # 允许用户配置凭证的供应商白名单（Base URL 一律由服务端解析，用户不可指定）
-      allowed-providers: ${APP_AI_BYOK_ALLOWED_PROVIDERS:dashscope,kimi,deepseek,glm}
+      allowed-providers: ${APP_AI_BYOK_ALLOWED_PROVIDERS:dashscope,kimi,deepseek,glm,volcengine}
       max-api-key-length: ${APP_AI_BYOK_MAX_API_KEY_LENGTH:512}
       max-model-name-length: ${APP_AI_BYOK_MAX_MODEL_NAME_LENGTH:128}
       # 用户级模型客户端缓存：按 userId::provider::model::credentialVersion 隔离，有界 + TTL
@@ -161,6 +161,10 @@ app:
         base-url: https://open.bigmodel.cn/api/coding/paas/v4
         api-key: ${PROVIDER_GLM_API_KEY:}
         model: ${PROVIDER_GLM_MODEL:glm-5}
+      volcengine:
+        base-url: https://ark.cn-beijing.volces.com/api/v3
+        api-key: ${PROVIDER_VOLCENGINE_API_KEY:}
+        model: ${PROVIDER_VOLCENGINE_MODEL:doubao-seed-2-1-pro-260915}
     advisors:
       enabled: ${APP_AI_ADVISORS_ENABLED:true}
       tool-call-enabled: ${APP_AI_ADVISORS_TOOL_CALL_ENABLED:true}

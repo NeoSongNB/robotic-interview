@@ -28,7 +28,8 @@ public class ProviderPresetRegistry {
         "dashscope", "阿里云百炼 DashScope",
         "kimi", "月之暗面 Kimi",
         "deepseek", "DeepSeek",
-        "glm", "智谱 GLM"
+        "glm", "智谱 GLM",
+        "volcengine", "火山引擎方舟（豆包）"
     );
 
     private final ByokProperties byokProperties;

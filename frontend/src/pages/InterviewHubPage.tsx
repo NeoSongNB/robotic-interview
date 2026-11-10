@@ -6,6 +6,8 @@ import {
   RefreshCw, Sparkles,
 } from 'lucide-react';
 import { type SkillDTO } from '../api/skill';
+import { userCredentialApi } from '../api/userCredential';
+import type { UserCredential } from '../types/userCredential';
 import { interviewApi, type TextSessionMeta } from '../api/interview';
 import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
 import { getSkillIcon } from '../utils/skillIcons';
@@ -36,6 +38,7 @@ export default function InterviewHubPage() {
   const navigate = useNavigate();
 
   const config = useInterviewConfig({ autoLoad: false });
+  const [chatProviders, setChatProviders] = useState<(UserCredential & { displayName: string })[]>([]);
 
   // === 最近面试记录 ===
   const [recentInterviews, setRecentInterviews] = useState<RecentInterviewItem[]>([]);
@@ -87,6 +90,22 @@ export default function InterviewHubPage() {
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([userCredentialApi.list(), userCredentialApi.providers()])
+      .then(([credentials, presets]) => {
+        if (cancelled) return;
+        const names = new Map(presets.map(preset => [preset.providerKey, preset.displayName]));
+        setChatProviders(credentials
+          .filter(credential => credential.configured && credential.chatEnabled && names.has(credential.providerKey))
+          .map(credential => ({ ...credential, displayName: names.get(credential.providerKey) ?? credential.providerKey })));
+      })
+      .catch(() => {
+        // 配置列表暂不可用时，面试仍可按默认模型开始。
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const handleStart = () => {
@@ -385,6 +404,28 @@ export default function InterviewHubPage() {
                     ))}
                   </select>
                 </div>
+
+                {chatProviders.length > 0 && (
+                  <div>
+                    <label htmlFor="interview-chat-provider" className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      聊天模型
+                    </label>
+                    <select
+                      id="interview-chat-provider"
+                      value={config.llmProvider}
+                      onChange={event => config.setLlmProvider(event.target.value)}
+                      className="w-full rounded-lg border border-primary-200 bg-white px-4 py-2.5 text-sm text-slate-900
+                        focus:outline-none focus:ring-2 focus:ring-primary-500/50 dark:border-primary-700/50 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="">自动选择</option>
+                      {chatProviders.map(provider => (
+                        <option key={provider.providerKey} value={provider.providerKey}>
+                          {provider.displayName}{provider.modelName ? ` · ${provider.modelName}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* 文字面试 - 题目数 */}
                 {config.mode === 'text' && (
