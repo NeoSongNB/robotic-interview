@@ -3,6 +3,7 @@ package interview.guide.modules.voiceinterview.service;
 import interview.guide.common.ai.LlmProviderRegistry;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.common.security.CurrentUserProvider;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.listener.VoiceEvaluateStreamProducer;
 import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
@@ -59,6 +60,8 @@ class VoiceInterviewEvaluationRecoveryTest {
     private LlmProviderRegistry llmProviderRegistry;
     @Mock
     private CurrentUserProvider currentUserProvider;
+    @Mock
+    private InterviewSkillService skillService;
 
     @Mock
     private RBucket<VoiceInterviewSessionEntity> sessionBucket;
@@ -75,7 +78,8 @@ class VoiceInterviewEvaluationRecoveryTest {
             properties,
             voiceEvaluateStreamProducer,
             llmProviderRegistry,
-            currentUserProvider
+            currentUserProvider,
+            skillService
         );
         lenient().when(redissonClient.<VoiceInterviewSessionEntity>getBucket(anyString()))
             .thenReturn(sessionBucket);

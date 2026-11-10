@@ -2,6 +2,7 @@ package interview.guide.modules.voiceinterview.service;
 
 import interview.guide.common.ai.PromptSanitizer;
 import interview.guide.common.ai.PromptSecurityConstants;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -11,8 +12,11 @@ public class VoiceInterviewPromptService {
 
     private final PromptSanitizer promptSanitizer;
 
-    public VoiceInterviewPromptService(PromptSanitizer promptSanitizer) {
+    private final InterviewSkillService skillService;
+
+    public VoiceInterviewPromptService(PromptSanitizer promptSanitizer, InterviewSkillService skillService) {
         this.promptSanitizer = promptSanitizer;
+        this.skillService = skillService;
     }
 
     private static final String VOICE_RESPONSE_CONSTRAINTS = """
@@ -34,7 +38,7 @@ public class VoiceInterviewPromptService {
     public String generateSystemPromptWithContext(String skillId, String resumeText) {
         StringBuilder prompt = new StringBuilder();
 
-        if (skillId != null && !skillId.isBlank()) {
+        if (skillService.hasPresetSkill(skillId)) {
             prompt.append(String.format(SKILL_TOOL_INSTRUCTION, skillId, skillId));
         }
 

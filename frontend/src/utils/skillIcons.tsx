@@ -3,8 +3,6 @@ import {
   SiOpenjdk,
   SiReact,
   SiPython,
-  SiBytedance,
-  SiAlibabadotcom,
 } from 'react-icons/si';
 import {
   TbMathFunction,
@@ -23,8 +21,6 @@ const SKILL_ICON_MAP: Record<string, IconType> = {
   'java-backend': SiOpenjdk,
   'frontend': SiReact,
   'python-backend': SiPython,
-  'bytedance-backend': SiBytedance,
-  'ali-backend': SiAlibabadotcom,
   'algorithm': TbMathFunction,
   'system-design': TbTopologyStarRing3,
   'test-development': TbTestPipe,
