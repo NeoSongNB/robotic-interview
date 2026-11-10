@@ -9,6 +9,20 @@ test.describe('语音面试', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('https://cdn.jsdelivr.net/**', route => route.abort());
 
+    // CI 不启动后端，需模拟登录态，否则 ProtectedRoute 会重定向到登录页。
+    await page.route('**/api/auth/csrf', route => route.fulfill({
+      json: { code: 200, message: 'success', data: null },
+    }));
+    await page.route('**/api/auth/me', route => route.fulfill({
+      json: {
+        code: 200, message: 'success',
+        data: {
+          id: 1, username: 'tester', email: null, role: 'USER', status: 'ACTIVE',
+          createdAt: null, lastLoginAt: null,
+        },
+      },
+    }));
+
     await page.addInitScript(() => {
       type SocketMessage = {
         type: string;

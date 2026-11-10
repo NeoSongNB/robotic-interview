@@ -9,6 +9,15 @@ const result = (id: number, analyzeStatus: string, extra = {}) => ({
   storage: { resumeId: id }, enqueueAccepted: true, duplicate: false, message: '', ...extra,
 });
 
+// CI 不启动后端，需模拟登录态，否则 ProtectedRoute 会重定向到登录页。
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/auth/csrf', route => success(route, null));
+  await page.route('**/api/auth/me', route => success(route, {
+    id: 1, username: 'tester', email: null, role: 'USER', status: 'ACTIVE',
+    createdAt: null, lastLoginAt: null,
+  }));
+});
+
 test('批量简历保留各自分析状态，兼容历史重复响应，并按分析阶段重试', async ({ page }) => {
   let uploads = 0;
   let retries = 0;
