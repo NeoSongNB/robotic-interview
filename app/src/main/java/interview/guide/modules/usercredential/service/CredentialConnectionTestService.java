@@ -7,6 +7,13 @@ import interview.guide.common.log.ErrorLogSanitizer;
 import interview.guide.modules.usercredential.dto.CredentialTestResultDTO;
 import interview.guide.modules.usercredential.dto.TestCredentialRequest;
 import interview.guide.modules.usercredential.service.UserCredentialService.ProviderSecret;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.voiceinterview.service.QwenAsrService;
+import interview.guide.modules.voiceinterview.service.QwenTtsService;
+import interview.guide.modules.voiceinterview.service.VolcengineSpeechService;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -38,6 +45,9 @@ public class CredentialConnectionTestService {
 
     private final LlmProviderRegistry llmProviderRegistry;
     private final UserCredentialService userCredentialService;
+    private final QwenAsrService qwenAsr;
+    private final QwenTtsService qwenTts;
+    private final VolcengineSpeechService volcSpeech;
 
     /**
      * 使用「已保存」的凭证做连接测试。
@@ -45,7 +55,7 @@ public class CredentialConnectionTestService {
     public CredentialTestResultDTO testSaved(Long userId, String providerKey) {
         ProviderSecret secret;
         try {
-            secret = userCredentialService.openChatSecret(userId, providerKey);
+            secret = userCredentialService.openSavedSecretForTest(userId, providerKey);
         } catch (BusinessException e) {
             // 未配置/解密失败/禁止的供应商：直接返回明确错误码，绝不去找平台 Key 兜底
             return failure(providerKey, null, e);
@@ -77,10 +87,14 @@ public class CredentialConnectionTestService {
     }
 
     private CredentialTestResultDTO probe(ProviderSecret secret) {
+        var speech = SpeechPresets.ALL.get(secret.providerKey());
+        if (speech != null) {
+            return probeSpeech(secret, speech);
+        }
         long start = System.nanoTime();
         try {
             ChatClient client = llmProviderRegistry.buildEphemeralChatClient(
-                secret.baseUrl(), secret.apiKey(), secret.modelName());
+                secret.providerKey(), secret.baseUrl(), secret.apiKey(), secret.modelName());
             String reply = client.prompt().user(PROBE_PROMPT).call().content();
             long latency = (System.nanoTime() - start) / 1_000_000;
             if (reply == null) {
@@ -110,6 +124,56 @@ public class CredentialConnectionTestService {
                 latency, message,
                 authError ? String.valueOf(ErrorCode.PROVIDER_AUTHENTICATION_FAILED.getCode()) : null);
         }
+    }
+
+    private CredentialTestResultDTO probeSpeech(ProviderSecret secret, SpeechPresets.Preset preset) {
+        long start = System.nanoTime();
+        boolean success = false;
+        String message;
+        if (!preset.model().equals(secret.modelName())) {
+            return new CredentialTestResultDTO(false, secret.providerKey(), secret.modelName(), 0L,
+                "请选择该供应商支持的语音模型", null);
+        }
+        boolean volcengine = secret.providerKey().startsWith("volcengine-");
+        try {
+            if (preset.capability() == AiCapability.TTS) {
+                byte[] audio = volcengine ? volcSpeech.synthesize("语音播报连接测试。", secret)
+                    : qwenTts.synthesize("语音播报连接测试。", secret.apiKey(), secret.modelName());
+                if (audio == null || audio.length == 0) {
+                    throw new IllegalStateException("语音服务未返回音频");
+                }
+                message = "连接成功，已合成测试音频";
+            } else {
+                var ready = new CompletableFuture<Void>();
+                String probeId = "probe-" + UUID.randomUUID();
+                try {
+                    if (volcengine) {
+                        volcSpeech.start(probeId, secret, ignored -> {}, ignored -> {},
+                            () -> ready.complete(null), ready::completeExceptionally);
+                    } else {
+                        qwenAsr.startTranscription(probeId, secret.apiKey(), secret.modelName(), ignored -> {}, ignored -> {},
+                            () -> ready.complete(null), ready::completeExceptionally);
+                    }
+                    ready.get(10, TimeUnit.SECONDS);
+                } finally {
+                    if (volcengine) {
+                        volcSpeech.stop(probeId);
+                    } else {
+                        qwenAsr.stopTranscription(probeId);
+                    }
+                }
+                message = "转写连接就绪，请用语音面试验证实际转写";
+            }
+            success = true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            message = "连接测试已中断，请重试";
+        } catch (Exception e) {
+            log.warn("语音连接测试失败: provider={}, error={}", secret.providerKey(), ErrorLogSanitizer.summarize(e));
+            message = "语音连接测试失败，请检查 API Key 和语音服务权限";
+        }
+        return new CredentialTestResultDTO(success, secret.providerKey(), secret.modelName(),
+            (System.nanoTime() - start) / 1_000_000, message, null);
     }
 
     private boolean looksLikeAuthFailure(Throwable e) {

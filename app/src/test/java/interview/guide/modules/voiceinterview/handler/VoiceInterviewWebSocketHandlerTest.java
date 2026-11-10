@@ -8,6 +8,11 @@ import interview.guide.modules.voiceinterview.service.DashscopeLlmService;
 import interview.guide.modules.voiceinterview.service.QwenAsrService;
 import interview.guide.modules.voiceinterview.service.QwenTtsService;
 import interview.guide.modules.voiceinterview.service.VoiceInterviewService;
+import interview.guide.modules.voiceinterview.service.VolcengineSpeechService;
+import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.service.UserCredentialService.ProviderSecret;
+import java.util.function.Consumer;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -42,6 +47,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class VoiceInterviewWebSocketHandlerTest {
@@ -52,6 +61,8 @@ class VoiceInterviewWebSocketHandlerTest {
   private QwenAsrService sttService;
   @Mock
   private QwenTtsService ttsService;
+  @Mock
+  private VolcengineSpeechService volcSpeech;
   @Mock
   private DashscopeLlmService llmService;
   @Mock
@@ -142,6 +153,43 @@ class VoiceInterviewWebSocketHandlerTest {
         .contains("这是当前轮回答");
   }
 
+  @Test
+  @DisplayName("未配置播报时，火山转写和选定的文本模型仍能完成一轮文字追问")
+  void volcAsrWithTextOnlyOutput() throws Exception {
+    var properties = new VoiceInterviewProperties();
+    properties.setLlmStreamingEnabled(false);
+    var session = mock(WebSocketSession.class);
+    when(session.isOpen()).thenReturn(true);
+    var entity = VoiceInterviewSessionEntity.builder().id(49L).userId(7L)
+        .llmProvider("hunyuan|2|1").asrReference("volcengine-asr|4|1").build();
+    when(interviewService.getSession(49L)).thenReturn(entity);
+    var secret = new ProviderSecret("volcengine-asr", "wss://example.invalid", "volc.seedasr.sauc.duration", "test-key", 1L);
+    when(userCredentialService.openCapabilitySecret(7L, AiCapability.ASR, "volcengine-asr|4|1")).thenReturn(secret);
+    when(llmService.chat(eq("我的回答"), eq(entity), any())).thenReturn("请举一个例子。");
+    doAnswer(invocation -> {
+      Consumer<String> onFinal = invocation.getArgument(2);
+      onFinal.accept("我的回答");
+      return null;
+    }).when(volcSpeech).start(eq("49"), eq(secret), any(), any(), any(), any());
+    handler = newHandler(properties, new ObjectMapper());
+    prepareSttState("49", session, false);
+
+    Method connect = VoiceInterviewWebSocketHandler.class.getDeclaredMethod(
+        "connectStt", String.class, WebSocketSession.class, boolean.class);
+    connect.setAccessible(true);
+    connect.invoke(handler, "49", session, false);
+    Method submit = VoiceInterviewWebSocketHandler.class.getDeclaredMethod("flushMergedUtteranceToLlm", String.class);
+    submit.setAccessible(true);
+    submit.invoke(handler, "49");
+
+    var messages = ArgumentCaptor.forClass(TextMessage.class);
+    verify(session, timeout(3000).atLeast(3)).sendMessage(messages.capture());
+    assertThat(messages.getAllValues()).anySatisfy(message ->
+        assertThat(message.getPayload()).contains("请举一个例子。"));
+    verifyNoInteractions(sttService, ttsService);
+    verify(volcSpeech, never()).synthesize(any(), any());
+  }
+
   private VoiceInterviewWebSocketHandler newHandler(VoiceInterviewProperties properties) {
     return newHandler(properties, objectMapper);
   }
@@ -153,6 +201,7 @@ class VoiceInterviewWebSocketHandlerTest {
         handlerObjectMapper,
         sttService,
         ttsService,
+        volcSpeech,
         llmService,
         interviewService,
         voiceContextCompressor,

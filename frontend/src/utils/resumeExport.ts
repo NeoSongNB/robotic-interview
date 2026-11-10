@@ -100,7 +100,10 @@ export function safeFileStem(title: string): string {
 
 /** 浏览器 Blob 下载，调用方负责生成文本内容。 */
 export function downloadTextFile(filename: string, text: string, mime: string) {
-  const blob = new Blob([text], { type: mime });
+  downloadFile(filename, new Blob([text], { type: mime }));
+}
+
+export function downloadFile(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

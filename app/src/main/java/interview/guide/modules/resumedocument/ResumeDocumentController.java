@@ -2,6 +2,8 @@ package interview.guide.modules.resumedocument;
 
 import interview.guide.common.annotation.RateLimit;
 import interview.guide.common.result.Result;
+import interview.guide.infrastructure.export.ResumePdfExportService;
+import interview.guide.infrastructure.export.ResumePdfExportService.ResumeView;
 import interview.guide.modules.resumedocument.model.ApplyProposalRequest;
 import interview.guide.modules.resumedocument.model.CreateResumeDocumentRequest;
 import interview.guide.modules.resumedocument.model.InitFromResumeRequest;
@@ -15,6 +17,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +42,16 @@ public class ResumeDocumentController {
 
     private final ResumeDocumentService documentService;
     private final ResumeDocumentAiService aiService;
+    private final ResumePdfExportService pdfExportService;
+
+    /** 从当前编辑快照生成 PDF，无需保存或读取其他简历。 */
+    @PostMapping("/api/resume-documents/export/pdf")
+    @RateLimit(dimension = RateLimit.Dimension.USER, count = 12, interval = 1,
+        timeUnit = RateLimit.TimeUnit.MINUTES)
+    public ResponseEntity<byte[]> exportPdf(@Valid @RequestBody ResumeView view) {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
+            .cacheControl(CacheControl.noStore()).body(pdfExportService.export(view));
+    }
 
     /** 当前用户的在线简历列表（供简历管理主页判断哪些原始简历已有可编辑版本）。 */
     @GetMapping("/api/resume-documents")

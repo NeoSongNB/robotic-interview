@@ -212,8 +212,10 @@ export const request = {
    * 文件下载，自动识别后端以 Blob 形式返回的 Result.error
    */
   async download(url: string, config?: AxiosRequestConfig): Promise<Blob> {
-    const response = await instance.get<Blob>(url, {
+    const response = await instance.request<Blob>({
+      method: 'GET',
       ...config,
+      url,
       responseType: 'blob',
       skipResultTransform: true,
     });

@@ -42,6 +42,9 @@ RUN ./gradlew :app:bootJar --no-daemon -x test
 # 技巧：多阶段构建 (Multi-stage build) 可以显著减小最终镜像的体积
 # ==============================================================================
 FROM eclipse-temurin:25-jre
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # 从第一阶段 (builder) 中复制生成的 JAR 文件到当前镜像

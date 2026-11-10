@@ -62,7 +62,8 @@ class VoiceInterviewSummaryPersistenceTest {
         evaluateStreamProducer,
         llmProviderRegistry,
         currentUserProvider,
-        skillService
+        skillService,
+            null
     );
   }
 

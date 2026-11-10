@@ -3,12 +3,14 @@ package interview.guide.modules.usercredential.service;
 import interview.guide.common.ai.AiExecutionContext;
 import interview.guide.common.ai.UserCredentialChangedEvent;
 import interview.guide.common.config.ByokProperties;
-import interview.guide.common.config.LlmProviderProperties;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.security.CurrentUserProvider;
 import interview.guide.modules.llmprovider.service.ApiKeyEncryptionService;
 import interview.guide.modules.usercredential.dto.CredentialStatusDTO;
+import interview.guide.modules.usercredential.dto.CapabilitySelectionDTO;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.repository.UserCapabilityRepository;
 import interview.guide.modules.usercredential.dto.ProviderPresetDTO;
 import interview.guide.modules.usercredential.dto.SaveCredentialRequest;
 import interview.guide.modules.usercredential.dto.UserCredentialDTO;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -50,14 +53,12 @@ public class UserCredentialService {
     private static final Pattern MODEL_NAME_PATTERN = Pattern.compile("^[A-Za-z0-9._:\\-/@]+$");
     private static final int MIN_API_KEY_LENGTH = 8;
     private static final int KEY_TAIL_LENGTH = 4;
-    /** 语音能力（ASR/TTS）固定绑定 DashScope。 */
-    private static final String SPEECH_PROVIDER = "dashscope";
 
     private final UserLlmCredentialRepository repository;
     private final ApiKeyEncryptionService encryptionService;
     private final ProviderPresetRegistry presetRegistry;
     private final ByokProperties byokProperties;
-    private final LlmProviderProperties llmProviderProperties;
+    private final UserCapabilityRepository capabilityRepository;
     private final CurrentUserProvider currentUserProvider;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -90,32 +91,81 @@ public class UserCredentialService {
     }
 
     /**
-     * 用户是否存在可用的 Chat 凭证。
-     *
-     * <p>用于闸门的前置判断：只有"完全没有配置"才提前拒绝，
-     * 具体缺少哪种能力由业务服务返回更精确的错误码。</p>
-     */
-    @Transactional(readOnly = true)
-    public boolean hasAnyUsableCredential(Long userId) {
-        return resolveChatCredential(userId, null).isPresent();
-    }
-
-    /**
      * 当前用户 AI 能力就绪状态（Chat / 语音）。
      */
     @Transactional(readOnly = true)
     public CredentialStatusDTO status(Long userId) {
-        Optional<UserLlmCredentialEntity> chat = resolveChatCredential(userId, null);
-        boolean speechReady = repository.findByUserIdAndProviderKey(userId, SPEECH_PROVIDER)
-            .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-            .isPresent();
-        return new CredentialStatusDTO(
-            chat.isPresent(),
+        var chat = selected(userId, AiCapability.TEXT);
+        var speech = selected(userId, AiCapability.ASR);
+        return new CredentialStatusDTO(chat.isPresent(),
             chat.map(UserLlmCredentialEntity::getProviderKey).orElse(null),
             chat.map(UserLlmCredentialEntity::getModelName).orElse(null),
-            speechReady,
-            speechReady ? SPEECH_PROVIDER : null
-        );
+            speech.isPresent(), speech.map(UserLlmCredentialEntity::getProviderKey).orElse(null));
+    }
+
+    @Transactional(readOnly = true)
+    public List<CapabilitySelectionDTO> capabilities(Long userId) {
+        var credentials = repository.findAllByUserIdOrderByUpdatedAtDesc(userId);
+        return java.util.Arrays.stream(AiCapability.values()).map(capability -> {
+            var selected = capabilityRepository.find(userId, capability).orElse(null);
+            String key = selected == null ? null : selected.providerKey();
+            var options = credentials.stream().filter(entity -> supports(entity, capability))
+                .map(entity -> new CapabilitySelectionDTO.Option(entity.getProviderKey(),
+                    presetRegistry.displayName(entity.getProviderKey()), entity.getModelName()))
+                .toList();
+            return new CapabilitySelectionDTO(capability, key,
+                credentials.stream().anyMatch(entity -> matchesSelection(selected, entity) && supports(entity, capability)), options);
+        }).toList();
+    }
+
+    @Transactional
+    public void selectCapability(Long userId, AiCapability capability, String providerKey) {
+        if (providerKey == null || providerKey.isBlank()) {
+            capabilityRepository.clear(userId, capability);
+            return;
+        }
+        String key = normalizeProviderKey(providerKey);
+        var entity = requireCredential(userId, capability, key);
+        capabilityRepository.save(userId, capability,
+            new UserCapabilityRepository.Selection(key, entity.getId(), entity.getModelName()));
+    }
+
+    @Transactional(readOnly = true)
+    public ProviderSecret openCapabilitySecret(Long userId, AiCapability capability, String reference) {
+        var entity = reference == null ? selected(userId, capability)
+            .orElseThrow(() -> missing(capability)) : requirePinned(userId, capability, reference);
+        return secret(entity);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<String> selectedReference(Long userId, AiCapability capability) {
+        return selected(userId, capability)
+            .map(entity -> entity.getProviderKey() + "|" + entity.getId() + "|" + entity.getCredentialVersion());
+    }
+
+    @Transactional(readOnly = true)
+    public String requireSelectedReference(Long userId, AiCapability capability) {
+        return selectedReference(userId, capability).orElseThrow(() -> missing(capability));
+    }
+
+    @Transactional(readOnly = true)
+    public ProviderSecret openSavedSecretForTest(Long userId, String providerKey) {
+        String key = normalizeProviderKey(providerKey);
+        return secret(requireCredential(userId, presetRegistry.capability(key), key));
+    }
+
+    @Transactional
+    public UserCredentialDTO reuseKey(Long userId, String targetProvider, String sourceProvider) {
+        String target = normalizeProviderKey(targetProvider);
+        String source = normalizeProviderKey(sourceProvider);
+        boolean compatible = target.startsWith("dashscope-")
+            && (source.equals("dashscope") || ("dashscope-asr".equals(source) || "dashscope-tts".equals(source)))
+            || target.startsWith("volcengine-") && ("volcengine-asr".equals(source) || "volcengine-tts".equals(source));
+        if (!compatible || !SpeechPresets.ALL.containsKey(target) || target.equals(source)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "这两个模型不能复用同一凭证");
+        }
+        return save(userId, new SaveCredentialRequest(target, decrypt(loadActive(userId, source)),
+            presetRegistry.defaultModel(target)));
     }
 
     // ==================================================================
@@ -135,7 +185,7 @@ public class UserCredentialService {
         presetRegistry.requireBaseUrl(providerKey);
 
         String apiKey = validateApiKey(request.apiKey());
-        String modelName = validateModelName(request.modelName());
+        String modelName = validateProviderModel(providerKey, request.modelName());
 
         ApiKeyEncryptionService.EncryptedValue encrypted = encryptionService.encrypt(apiKey);
 
@@ -153,7 +203,7 @@ public class UserCredentialService {
         entity.setKeyVersion(currentKeyVersion());
         entity.setKeyTail(extractKeyTail(apiKey));
         entity.setStatus(CredentialStatus.ACTIVE.name());
-        entity.setChatEnabled(Boolean.TRUE);
+        entity.setChatEnabled(presetRegistry.capability(providerKey) == AiCapability.TEXT);
         entity.setCredentialVersion(
             (entity.getCredentialVersion() == null ? 0L : entity.getCredentialVersion()) + 1);
 
@@ -174,7 +224,7 @@ public class UserCredentialService {
         UserLlmCredentialEntity entity = repository
             .findByUserIdAndProviderKey(userId, key)
             .orElseThrow(() -> new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED));
-        entity.setModelName(validateModelName(modelName));
+        entity.setModelName(validateProviderModel(key, modelName));
         entity.setCredentialVersion(
             (entity.getCredentialVersion() == null ? 0L : entity.getCredentialVersion()) + 1);
         UserLlmCredentialEntity saved = repository.save(entity);
@@ -218,8 +268,9 @@ public class UserCredentialService {
      */
     @Transactional(readOnly = true)
     public AiExecutionContext chatContextForUser(Long userId, String preferredProviderKey) {
-        UserLlmCredentialEntity entity = resolveChatCredential(userId, preferredProviderKey)
-            .orElseThrow(() -> new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED));
+        var entity = preferredProviderKey != null && preferredProviderKey.contains("|")
+            ? requirePinned(userId, AiCapability.TEXT, preferredProviderKey)
+            : selected(userId, AiCapability.TEXT).orElseThrow(() -> missing(AiCapability.TEXT));
         return toContext(entity);
     }
 
@@ -231,7 +282,7 @@ public class UserCredentialService {
     @Transactional(readOnly = true)
     public ProviderSecret openChatSecret(Long userId, String providerKey) {
         UserLlmCredentialEntity entity = loadActive(userId, providerKey);
-        if (!Boolean.TRUE.equals(entity.getChatEnabled())) {
+        if (!supports(entity, AiCapability.TEXT)) {
             throw new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED);
         }
         return new ProviderSecret(
@@ -260,62 +311,59 @@ public class UserCredentialService {
         );
     }
 
-    /** 语音能力（ASR/TTS）所需的 DashScope 明文凭证；未配置时抛出明确错误。 */
-    @Transactional(readOnly = true)
-    public String requireSpeechApiKey(Long userId) {
-        UserLlmCredentialEntity entity = repository
-            .findByUserIdAndProviderKey(userId, SPEECH_PROVIDER)
-            .filter(item -> CredentialStatus.ACTIVE.name().equals(item.getStatus()))
-            .orElseThrow(() -> new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED));
-        return decrypt(entity);
+    private Optional<UserLlmCredentialEntity> selected(Long userId, AiCapability capability) {
+        return capabilityRepository.find(userId, capability)
+            .flatMap(choice -> repository.findByUserIdAndProviderKey(userId, choice.providerKey())
+                .filter(entity -> matchesSelection(choice, entity)))
+            .filter(entity -> supports(entity, capability));
     }
 
-    /**
-     * 用户是否具备语音能力（ASR/TTS）所需的 DashScope 凭证。
-     */
-    @Transactional(readOnly = true)
-    public boolean hasSpeechCredential(Long userId) {
-        return repository.findByUserIdAndProviderKey(userId, SPEECH_PROVIDER)
-            .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-            .isPresent();
+    private boolean matchesSelection(UserCapabilityRepository.Selection selected, UserLlmCredentialEntity entity) {
+        return selected != null && selected.providerKey().equals(entity.getProviderKey())
+            && Objects.equals(selected.credentialId(), entity.getId())
+            && selected.modelName().equals(entity.getModelName());
     }
 
-    // ==================================================================
-    // 内部实现
-    // ==================================================================
-
-    /**
-     * Chat 凭证选择顺序：
-     * <ol>
-     *   <li>业务侧期望的供应商（用户确实配置了且启用 Chat）；</li>
-     *   <li>平台默认 Chat 供应商（用户配置了）；</li>
-     *   <li>用户最近更新的可用 Chat 凭证。</li>
-     * </ol>
-     * 绝不回退到平台/开发者全局 Key。
-     */
-    private Optional<UserLlmCredentialEntity> resolveChatCredential(Long userId, String preferredProviderKey) {
-        if (preferredProviderKey != null && !preferredProviderKey.isBlank()) {
-            Optional<UserLlmCredentialEntity> preferred = activeChat(userId, preferredProviderKey);
-            if (preferred.isPresent()) {
-                return preferred;
-            }
-        }
-        String defaultProvider = llmProviderProperties.getDefaultProvider();
-        if (defaultProvider != null && !defaultProvider.isBlank()) {
-            Optional<UserLlmCredentialEntity> byDefault = activeChat(userId, defaultProvider);
-            if (byDefault.isPresent()) {
-                return byDefault;
-            }
-        }
-        return repository.findByUserIdAndChatEnabledTrueOrderByUpdatedAtDesc(userId).stream()
-            .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-            .findFirst();
-    }
-
-    private Optional<UserLlmCredentialEntity> activeChat(Long userId, String providerKey) {
+    private UserLlmCredentialEntity requireCredential(Long userId, AiCapability capability, String providerKey) {
         return repository.findByUserIdAndProviderKey(userId, normalizeProviderKey(providerKey))
-            .filter(entity -> CredentialStatus.ACTIVE.name().equals(entity.getStatus()))
-            .filter(entity -> Boolean.TRUE.equals(entity.getChatEnabled()));
+            .filter(entity -> supports(entity, capability)).orElseThrow(() -> missing(capability));
+    }
+
+    private UserLlmCredentialEntity requirePinned(Long userId, AiCapability capability, String reference) {
+        int separator = reference.indexOf('|');
+        if (separator <= 0) {
+            throw missing(capability);
+        }
+        var entity = requireCredential(userId, capability, reference.substring(0, separator));
+        if (!(entity.getId() + "|" + entity.getCredentialVersion()).equals(reference.substring(separator + 1))) {
+            throw new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED,
+                capability.label() + "配置已变更，请重新发起本次操作。");
+        }
+        return entity;
+    }
+
+    private ProviderSecret secret(UserLlmCredentialEntity entity) {
+        return new ProviderSecret(entity.getProviderKey(), presetRegistry.requireBaseUrl(entity.getProviderKey()),
+            entity.getModelName(), decrypt(entity), entity.getCredentialVersion());
+    }
+
+    private boolean supports(UserLlmCredentialEntity entity, AiCapability capability) {
+        return CredentialStatus.ACTIVE.name().equals(entity.getStatus())
+            && (capability != AiCapability.TEXT || Boolean.TRUE.equals(entity.getChatEnabled()))
+            && presetRegistry.supports(entity.getProviderKey(), entity.getModelName(), capability);
+    }
+
+    private BusinessException missing(AiCapability capability) {
+        return new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED,
+            "尚未选择可用的" + capability.label() + "模型，请前往「设置 → 我的 AI 配置」选择。");
+    }
+
+    private String validateProviderModel(String providerKey, String modelName) {
+        String model = validateModelName(modelName);
+        if (!presetRegistry.supports(providerKey, model, presetRegistry.capability(providerKey))) {
+            throw new BusinessException(ErrorCode.USER_CREDENTIAL_MODEL_NOT_ALLOWED);
+        }
+        return model;
     }
 
     private AiExecutionContext toContext(UserLlmCredentialEntity entity) {
@@ -378,8 +426,8 @@ public class UserCredentialService {
         if (trimmed.length() > byokProperties.getMaxApiKeyLength()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "API Key 长度超出限制");
         }
-        if (trimmed.chars().anyMatch(Character::isWhitespace)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "API Key 不能包含空白字符");
+        if (trimmed.chars().anyMatch(c -> c < 33 || c > 126)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "API Key 只能包含可见 ASCII 字符");
         }
         return trimmed;
     }

@@ -148,6 +148,7 @@ public class DocumentParseService {
         // 7. PDF 专用配置：关闭图片提取，按位置排序文本
         PDFParserConfig pdfConfig = new PDFParserConfig();
         pdfConfig.setExtractInlineImages(false);
+        pdfConfig.setOcrStrategy(PDFParserConfig.OCR_STRATEGY.NO_OCR);
         pdfConfig.setSortByPosition(true); // 按 x/y 坐标排序文本，改善多栏布局解析顺序
         // 注意：Tika 2.9.2 中 setExtractAnnotations 方法可能不存在，关闭图片提取已足够
         context.set(PDFParserConfig.class, pdfConfig);

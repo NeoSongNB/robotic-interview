@@ -1,4 +1,5 @@
 import {request} from './request';
+import {buildResumeViewModel} from '../types/resumeViewModel';
 import type {
   ResumeChatTurn,
   ResumeContent,
@@ -15,6 +16,22 @@ export interface UpdateResumeDocumentPayload {
 
 /** 在线简历文档接口，统一复用 request.ts 的 Cookie + CSRF 与 Result 解包。 */
 export const resumeDocumentApi = {
+  async exportPdf(content: ResumeContent): Promise<Blob> {
+    const {header, sections} = buildResumeViewModel(content);
+    return request.download('/api/resume-documents/export/pdf', {
+      method: 'POST',
+      data: {
+        header,
+        sections: sections.map(({title, skills, items}) => ({
+          title, skills,
+          items: items.map(({title, subtitle, date, summary, links, tags, highlights}) => ({
+            title, subtitle, date, summary, links, tags, highlights,
+          })),
+        })),
+      },
+    });
+  },
+
   async list(): Promise<ResumeDocument[]> {
     return request.get<ResumeDocument[]>('/api/resume-documents');
   },

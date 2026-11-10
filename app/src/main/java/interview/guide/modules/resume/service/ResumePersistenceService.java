@@ -71,7 +71,7 @@ public class ResumePersistenceService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ResumeEntity saveResume(MultipartFile file, String resumeText,
-                                   String storageKey, String storageUrl) {
+                                   String storageKey, String storageUrl, String textReference) {
         try {
             String fileHash = fileHashService.calculateHash(file);
             
@@ -85,6 +85,7 @@ public class ResumePersistenceService {
             resume.setStorageKey(storageKey);
             resume.setStorageUrl(storageUrl);
             resume.setResumeText(resumeText);
+            resume.setTextModelReference(textReference);
             // 进展时间初始化：NULL 会被 stale 扫描的阈值比较排除
             resume.setAnalyzeUpdatedAt(java.time.LocalDateTime.now());
 

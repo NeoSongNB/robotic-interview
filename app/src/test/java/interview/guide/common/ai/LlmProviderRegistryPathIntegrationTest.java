@@ -35,6 +35,7 @@ class LlmProviderRegistryPathIntegrationTest {
 
   private HttpServer server;
   private final List<String> receivedPaths = new CopyOnWriteArrayList<>();
+  private final List<String> receivedBodies = new CopyOnWriteArrayList<>();
   private int port;
 
   @BeforeEach
@@ -42,6 +43,7 @@ class LlmProviderRegistryPathIntegrationTest {
     server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/", exchange -> {
       receivedPaths.add(exchange.getRequestURI().getPath());
+      receivedBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
       String body = """
           {
             "id": "chatcmpl-test",
@@ -123,5 +125,22 @@ class LlmProviderRegistryPathIntegrationTest {
 
     assertThat(receivedPaths).hasSize(1);
     assertThat(receivedPaths.get(0)).isEqualTo("/api/v3/chat/completions");
+  }
+
+  @Test
+  @DisplayName("Kimi 连接测试使用供应商配置的温度")
+  void kimiProbeUsesProviderTemperature() {
+    LlmProviderProperties properties = new LlmProviderProperties();
+    ProviderConfig config = new ProviderConfig();
+    config.setTemperature(1.0);
+    properties.setProviders(Map.of("kimi", config));
+    LlmProviderRegistry registry = new LlmProviderRegistry(
+        properties, DefaultToolCallingManager.builder().build(), null, null);
+
+    ChatClient client = registry.buildEphemeralChatClient(
+        "kimi", "http://127.0.0.1:" + port + "/v1", "test-key", "kimi-k2.6");
+
+    assertThat(client.prompt("hi").call().content()).isEqualTo("ok");
+    assertThat(receivedBodies).singleElement().asString().contains("\"temperature\":1.0");
   }
 }

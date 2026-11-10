@@ -10,6 +10,7 @@ import interview.guide.common.security.CurrentUserProvider;
 import interview.guide.infrastructure.redis.InterviewSessionCache;
 import interview.guide.infrastructure.redis.InterviewSessionCache.CachedSession;
 import interview.guide.modules.usercredential.service.UserCredentialService;
+import interview.guide.modules.usercredential.model.AiCapability;
 import interview.guide.infrastructure.redis.RedisService;
 import interview.guide.modules.interview.listener.EvaluateStreamProducer;
 import interview.guide.modules.interview.model.CreateInterviewRequest;
@@ -131,10 +132,9 @@ public class InterviewSessionService {
             persistenceService.getHistoricalQuestions(skillId, request.resumeId());
 
         // 出题必须使用当前用户自己的模型凭证；未配置时立即失败，不回退平台 Key
-        AiExecutionContext chatContext = userCredentialService.chatContextForUser(
-            currentUserProvider.requireUserId(), request.llmProvider());
-        // 会话记录实际生效的供应商，后续异步评分沿用同一份用户凭证
-        String effectiveProvider = chatContext.providerKey();
+        Long userId = currentUserProvider.requireUserId();
+        String effectiveProvider = userCredentialService.requireSelectedReference(userId, AiCapability.TEXT);
+        AiExecutionContext chatContext = userCredentialService.chatContextForUser(userId, effectiveProvider);
 
         // 基于 Skill 生成面试问题
         List<InterviewQuestionDTO> questions = questionService.generateQuestionsBySkill(

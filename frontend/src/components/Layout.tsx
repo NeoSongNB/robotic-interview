@@ -60,7 +60,6 @@ export default function Layout() {
             skillId: config.skillId,
             difficulty: config.difficulty,
             questionCount: config.questionCount,
-            llmProvider: config.llmProvider,
           },
         },
       });
@@ -81,7 +80,6 @@ export default function Layout() {
           hrEnabled: true,
           plannedDuration: config.plannedDuration,
           resumeId: config.resumeId,
-          llmProvider: config.llmProvider,
         },
       },
     });

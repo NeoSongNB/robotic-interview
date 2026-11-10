@@ -11,6 +11,7 @@ import '../components/resume-studio/resume-print.css';
 import {resumeDocumentApi} from '../api/resumeDocument';
 import {getErrorMessage} from '../api/request';
 import {ROUTES} from '../constants/routes';
+import {downloadFile, safeFileStem} from '../utils/resumeExport';
 import {
   createBlankResumeContent,
   newLocalId,
@@ -26,7 +27,7 @@ type StudioTab = 'edit' | 'ai';
 
 /**
  * 简历编辑工作台（简历管理模块内部二级页面，不新增 Dock 入口）。
- * 左侧「内容编辑 / AI 修改」双页签，右侧 A4 实时预览；预览与 PDF 共用同一模板。
+ * 左侧「内容编辑 / AI 修改」双页签，右侧 A4 实时预览；预览与 PDF 共用简历视图模型。
  */
 export default function ResumeStudioPage() {
   const {documentId: rawId} = useParams<{documentId: string}>();
@@ -49,6 +50,7 @@ export default function ResumeStudioPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<StudioTab>('edit');
 
@@ -144,15 +146,29 @@ export default function ResumeStudioPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [enqueueSave]);
 
-  const autoPrint = (location.state as {autoPrint?: boolean} | null)?.autoPrint === true;
+  const handleExportPdf = useCallback(async () => {
+    const snapshot = stateRef.current;
+    const filename = safeFileStem(snapshot.title) + '.pdf';
+    setExportingPdf(true);
+    try {
+      const pdf = await resumeDocumentApi.exportPdf(snapshot.content);
+      downloadFile(filename, pdf);
+    } catch (error) {
+      setNotice('PDF 导出失败：' + getErrorMessage(error));
+    } finally {
+      setExportingPdf(false);
+    }
+  }, []);
+
+  const autoExportPdf = (location.state as {autoExportPdf?: boolean} | null)?.autoExportPdf === true;
   useEffect(() => {
-    if (!loaded || !autoPrint) return;
+    if (!loaded || !autoExportPdf) return;
     const timer = window.setTimeout(() => {
-      window.print();
       navigate(ROUTES.resumeStudio(documentId), {replace: true, state: null});
-    }, 500);
+      void handleExportPdf();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [loaded, autoPrint, documentId, navigate]);
+  }, [loaded, autoExportPdf, documentId, navigate, handleExportPdf]);
 
   const markDirty = () => {
     dirtyRef.current = true;
@@ -275,7 +291,8 @@ export default function ResumeStudioPage() {
         onSave={handleSaveNow}
         templateCode={templateCode}
         onBack={() => navigate(ROUTES.resumeHistory)}
-        onPrint={() => window.print()}
+        onExportPdf={handleExportPdf}
+        exportingPdf={exportingPdf}
         busy={chatLoading || applyLoading}
         frozen={frozen}
       />

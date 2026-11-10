@@ -10,6 +10,9 @@ import interview.guide.modules.voiceinterview.model.VoiceInterviewSessionEntity;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.context.VoiceContextCompressor;
 import interview.guide.modules.voiceinterview.service.QwenAsrService;
+import interview.guide.modules.voiceinterview.service.VolcengineSpeechService;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.service.UserCredentialService.ProviderSecret;
 import interview.guide.common.ai.AiExecutionContext;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
@@ -64,6 +67,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     private final ObjectMapper objectMapper;
     private final QwenAsrService sttService;
     private final QwenTtsService ttsService;
+    private final VolcengineSpeechService volcSpeech;
     private final DashscopeLlmService llmService;
     private final VoiceInterviewService interviewService;
     private final VoiceContextCompressor voiceContextCompressor;
@@ -85,7 +89,6 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
 
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, SessionState> sessionStates = new ConcurrentHashMap<>();
-    private final Map<String, byte[]> openingAudioCache = new ConcurrentHashMap<>();
 
     // Activity tracking for pause timeout
     // 活动跟踪（用于暂停超时）
@@ -118,7 +121,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     void warmupOpeningAudioCache() {
         // BYOK 阶段二：TTS 必须使用「每个用户自己的」DashScope 凭证。
         // 启动期预热会用开发者全局 Key 合成音频，属于全局 Key 泄漏，因此显式停用。
-        // 开场白音频改为在该用户首次进入会话时，用其自身凭证合成并缓存。
+        // 开场白音频按本场会话选择合成。
         log.info("Opening audio cache warmup is disabled (BYOK: TTS uses per-user credentials)");
     }
 
@@ -155,7 +158,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         log.info("WebSocket connection established for session: {}", sessionId);
 
         try {
-            startDashScopeStt(sessionId, safeSession);
+            startStt(sessionId, safeSession);
 
             // 发送欢迎消息
             sendMessage(safeSession, createWelcomeMessage());
@@ -237,7 +240,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                 sendTextMessage(session, aiReply, true);
 
                 // 语音随后下发
-                byte[] wavAudio = getOpeningWavAudio(sessionId, aiReply);
+                byte[] wavAudio = synthesizeToWav(sessionId, aiReply);
                 if (wavAudio.length > 0 && session.isOpen()) {
                     sendAudio(session, wavAudio, aiReply);
                 }
@@ -249,20 +252,8 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         });
     }
 
-    private byte[] getOpeningWavAudio(String sessionId, String text) {
-        byte[] cached = openingAudioCache.get(text);
-        if (cached != null && cached.length > 0) {
-            return cached;
-        }
-        byte[] wav = synthesizeToWav(sessionId, text);
-        if (wav.length > 0) {
-            openingAudioCache.put(text, wav);
-        }
-        return wav;
-    }
-
     private byte[] synthesizeToWav(String sessionId, String text) {
-        byte[] pcm = ttsService.synthesize(text, speechApiKey(sessionId));
+        byte[] pcm = synthesize(sessionId, text);
         if (pcm == null || pcm.length == 0) {
             return new byte[0];
         }
@@ -374,7 +365,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             lastActivityTime.remove(sessionId);
 
             // Stop STT transcription
-            sttService.stopTranscription(sessionId);
+            stopAsr(sessionId);
             log.info("WebSocket connection closed for session: {}, status: {}", sessionId, status);
 
             // WebSocket 异常断开时自动结束会话，防止状态永远停留在 IN_PROGRESS
@@ -407,28 +398,35 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         return m != null && m.contains("ASR session not ready");
     }
 
-    private void startDashScopeStt(String sessionId, WebSocketSession session) {
-        String userApiKey;
-        try {
-            userApiKey = speechApiKey(sessionId);
-        } catch (Exception e) {
-            log.warn("[Session: {}] 缺少用户级 DashScope 凭证，语音识别不可用", sessionId);
-            sendError(session, "尚未配置 DashScope API Key，语音识别暂不可用。请前往设置页完成「我的 AI 配置」。");
-            return;
-        }
-        sttService.startTranscription(
-                sessionId,
-                userApiKey,
-                text -> handleSttResult(sessionId, text, true),
-                text -> handleSttResult(sessionId, text, false),
-                () -> sendAsrReady(session),
-                error -> {
-                    log.error("STT error for session {}", sessionId, error);
-                    sendError(session, "语音识别失败: " + error.getMessage());
-                }
-        );
-
+    private void startStt(String sessionId, WebSocketSession session) {
+        connectStt(sessionId, session, false);
         scheduleAsrReadyCheck(sessionId, session, 0);
+    }
+
+    private void connectStt(String sessionId, WebSocketSession session, boolean restart) {
+        try {
+            var entity = getSessionEntity(sessionId);
+            if (entity == null || entity.getAsrReference() == null) {
+                sendError(session, "当前会话没有可用的语音转写配置，请在设置中选择模型后重新开始。");
+                return;
+            }
+            var secret = userCredentialService.openCapabilitySecret(entity.getUserId(), AiCapability.ASR,
+                entity.getAsrReference());
+            java.util.function.Consumer<String> onFinal = text -> handleSttResult(sessionId, text, true);
+            java.util.function.Consumer<String> onPartial = text -> handleSttResult(sessionId, text, false);
+            Runnable onReady = () -> sendAsrReady(session);
+            java.util.function.Consumer<Throwable> onError =
+                error -> sendError(session, "语音转写连接失败，请检查所选模型和凭证。");
+            if ("volcengine-asr".equals(secret.providerKey())) {
+                volcSpeech.start(sessionId, secret, onFinal, onPartial, onReady, onError);
+            } else if (restart) {
+                sttService.restartTranscription(sessionId, secret.apiKey(), secret.modelName(), onFinal, onPartial, onReady, onError);
+            } else {
+                sttService.startTranscription(sessionId, secret.apiKey(), secret.modelName(), onFinal, onPartial, onReady, onError);
+            }
+        } catch (BusinessException e) {
+            sendError(session, e.getMessage());
+        }
     }
 
     private void scheduleAsrReadyCheck(String sessionId, WebSocketSession session, int retryCount) {
@@ -440,7 +438,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
     }
 
     private void checkAsrReadyOrRetry(String sessionId, WebSocketSession session, int retryCount) {
-        if (session == null || !session.isOpen() || sttService.isReady(sessionId)) {
+        if (session == null || !session.isOpen() || (usesVolcAsr(sessionId) ? volcSpeech.isReady(sessionId) : sttService.isReady(sessionId))) {
             return;
         }
 
@@ -449,7 +447,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             log.warn("[Session: {}] ASR not ready after {}s, retrying ({}/{})",
                 sessionId, ASR_READY_CHECK_DELAY_SECONDS, nextRetry, MAX_ASR_READY_RETRY);
             sendAsrStatus(session, "asr_reconnecting", "语音识别连接较慢，正在自动重连");
-            restartDashScopeStt(sessionId);
+            restartStt(sessionId);
             scheduleAsrReadyCheck(sessionId, session, nextRetry);
             return;
         }
@@ -458,33 +456,30 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         sendError(session, "语音识别连接准备超时，请检查语音服务配置或稍后重试");
     }
 
-    /**
-     * DashScope ASR 断线后重连（回调与首次 start 一致）
-     */
-    private void restartDashScopeStt(String sessionId) {
+    private void restartStt(String sessionId) {
         WebSocketSession session = sessions.get(sessionId);
-        if (session == null || !session.isOpen()) {
-            return;
+        if (session != null && session.isOpen()) {
+            connectStt(sessionId, session, true);
         }
-        String userApiKey;
-        try {
-            userApiKey = speechApiKey(sessionId);
-        } catch (Exception e) {
-            log.warn("[Session: {}] 缺少用户级 DashScope 凭证，无法重连语音识别", sessionId);
-            sendError(session, "尚未配置 DashScope API Key，语音识别暂不可用。请前往设置页完成「我的 AI 配置」。");
-            return;
+    }
+
+    private boolean usesVolcAsr(String sessionId) {
+        var entity = getSessionEntity(sessionId);
+        return entity != null && entity.getAsrReference() != null
+            && entity.getAsrReference().startsWith("volcengine-asr|");
+    }
+
+    private void appendAsr(String sessionId, byte[] audio) {
+        if (usesVolcAsr(sessionId)) {
+            volcSpeech.send(sessionId, audio);
+        } else {
+            sttService.sendAudio(sessionId, audio);
         }
-        sttService.restartTranscription(
-                sessionId,
-                userApiKey,
-                text -> handleSttResult(sessionId, text, true),
-                text -> handleSttResult(sessionId, text, false),
-                () -> sendAsrReady(session),
-                error -> {
-                    log.error("STT error for session {}", sessionId, error);
-                    sendError(session, "语音识别失败: " + error.getMessage());
-                }
-        );
+    }
+
+    private void stopAsr(String sessionId) {
+        sttService.stopTranscription(sessionId);
+        volcSpeech.stop(sessionId);
     }
 
     /**
@@ -509,20 +504,20 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             log.debug("Received audio data for session {}, size: {} bytes", sessionId, audioData.length);
 
             try {
-                sttService.sendAudio(sessionId, audioData);
+                appendAsr(sessionId, audioData);
             } catch (IllegalStateException ex) {
                 if (isAsrNotReady(ex)) {
                     log.debug("[Session: {}] Dropping audio chunk before ASR ready", sessionId);
                     return;
                 } else if (shouldRecoverAsrConnection(ex)) {
-                    log.warn("[Session: {}] ASR send failed ({}), restarting DashScope and retrying chunk",
+                    log.warn("[Session: {}] ASR send failed ({}), restarting ASR and retrying chunk",
                             sessionId, ex.getMessage() != null ? ex.getMessage() : "unknown");
-                    restartDashScopeStt(sessionId);
+                    restartStt(sessionId);
                     boolean sent = false;
                     for (int i = 0; i < 15; i++) {
                         try {
                             Thread.sleep(80);
-                            sttService.sendAudio(sessionId, audioData);
+                            appendAsr(sessionId, audioData);
                             sent = true;
                             break;
                         } catch (IllegalStateException retry) {
@@ -666,7 +661,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                     Math.max(1, voiceInterviewProperties.getMaxConcurrentTtsPerSession()));
                 boolean chunkedEnabled = voiceInterviewProperties.isChunkedAudioEnabled();
                 long ttsTimeoutSec = Math.max(5, voiceInterviewProperties.getTtsTimeoutSeconds());
-                OrderedTtsChunkEmitter chunkEmitter = chunkedEnabled
+                OrderedTtsChunkEmitter chunkEmitter = chunkedEnabled && sessionEntity.getTtsReference() != null
                     ? new OrderedTtsChunkEmitter(sessionId, session, ttsSemaphore, ttsTimeoutSec)
                     : null;
                 List<CompletableFuture<byte[]>> ttsFutures = new ArrayList<>();
@@ -687,7 +682,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                         sendTextMessage(session, partialText, false);
                     },
                     sentence -> {
-                        if (sentence == null || sentence.isBlank()) {
+                        if (sessionEntity.getTtsReference() == null || sentence == null || sentence.isBlank()) {
                             return;
                         }
                         if (chunkEmitter != null) {
@@ -697,7 +692,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                         ttsSemaphore.acquireUninterruptibly();
                         CompletableFuture<byte[]> future = CompletableFuture.supplyAsync(() -> {
                             try {
-                                return ttsService.synthesize(sentence, speechApiKey(sessionId));
+                                return synthesize(sessionId, sentence);
                             } finally {
                                 ttsSemaphore.release();
                             }
@@ -731,7 +726,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                         log.info("[Session: {}] Streaming TTS produced no chunks, falling back to full-text TTS",
                             sessionId);
                         try {
-                            byte[] fallbackPcm = ttsService.synthesize(aiReply, speechApiKey(sessionId));
+                            byte[] fallbackPcm = synthesize(sessionId, aiReply);
                             if (fallbackPcm != null && fallbackPcm.length > 0) {
                                 sendAudio(session, convertPcmToWav(fallbackPcm), aiReply);
                             }
@@ -771,7 +766,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                         log.info("[Session: {}] All {} sentence TTS calls failed, falling back to full-text TTS",
                             sessionId, failedCount);
                         try {
-                            byte[] fallbackPcm = ttsService.synthesize(aiReply, speechApiKey(sessionId));
+                            byte[] fallbackPcm = synthesize(sessionId, aiReply);
                             if (fallbackPcm != null && fallbackPcm.length > 0) {
                                 byte[] wavAudio = convertPcmToWav(fallbackPcm);
                                 log.info("[Session: {}] Fallback TTS succeeded, WAV size: {} bytes",
@@ -820,7 +815,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
                 long ttsStartNanos = System.nanoTime();
                 log.info("[Session: {}] Starting TTS synthesis for text (length: {})",
                     sessionId, aiReply.length());
-                byte[] aiAudio = ttsService.synthesize(aiReply, speechApiKey(sessionId));
+                byte[] aiAudio = synthesize(sessionId, aiReply);
                 recordTimerSinceNanos("app.voice.interview.tts.duration", ttsStartNanos, "status", "success");
 
                 if (!session.isOpen()) {
@@ -1017,7 +1012,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             ttsSemaphore.acquireUninterruptibly();
             CompletableFuture<byte[]> future = CompletableFuture.supplyAsync(() -> {
                 try {
-                    return ttsService.synthesize(sentence, speechApiKey(sessionId));
+                    return synthesize(sessionId, sentence);
                 } finally {
                     ttsSemaphore.release();
                 }
@@ -1211,7 +1206,7 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
             }
 
             // 4. Cleanup - Stop ASR session to prevent resource leak
-            sttService.stopTranscription(sessionId);
+            stopAsr(sessionId);
             sessions.remove(sessionId);
             sessionStates.remove(sessionId);
             lastActivityTime.remove(sessionId);
@@ -1259,18 +1254,23 @@ public class VoiceInterviewWebSocketHandler extends TextWebSocketHandler impleme
         }
     }
 
-    /**
-     * 解析该会话所属用户自己的 DashScope 凭证，用于 ASR/TTS。
-     *
-     * <p>用户未配置 DashScope 凭证时抛出明确错误，<b>绝不</b>回退到开发者全局 Key。</p>
-     */
-    private String speechApiKey(String sessionId) {
-        VoiceInterviewSessionEntity entity = getSessionEntity(sessionId);
-        if (entity == null || entity.getUserId() == null) {
-            throw new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED,
-                "无法确定语音会话所属用户，已拒绝使用平台默认语音凭证");
+    private byte[] synthesize(String sessionId, String text) {
+        var entity = getSessionEntity(sessionId);
+        if (entity == null || entity.getTtsReference() == null) {
+            return new byte[0];
         }
-        return userCredentialService.requireSpeechApiKey(entity.getUserId());
+        try {
+            ProviderSecret secret = userCredentialService.openCapabilitySecret(entity.getUserId(),
+                AiCapability.TTS, entity.getTtsReference());
+            return "volcengine-tts".equals(secret.providerKey())
+                ? volcSpeech.synthesize(text, secret) : ttsService.synthesize(text, secret.apiKey(), secret.modelName());
+        } catch (Exception e) {
+            var session = sessions.get(sessionId);
+            if (session != null && session.isOpen()) {
+                sendAsrStatus(session, "tts_unavailable", "所选播报模型暂不可用，本场可继续查看文字。");
+            }
+            return new byte[0];
+        }
     }
 
     /**

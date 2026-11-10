@@ -12,6 +12,8 @@ import interview.guide.modules.usercredential.dto.CredentialStatusDTO;
 import interview.guide.modules.usercredential.dto.SaveCredentialRequest;
 import interview.guide.modules.usercredential.dto.UserCredentialDTO;
 import interview.guide.modules.usercredential.model.CredentialStatus;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.repository.UserCapabilityRepository;
 import interview.guide.modules.usercredential.model.UserLlmCredentialEntity;
 import interview.guide.modules.usercredential.repository.UserLlmCredentialRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +60,9 @@ class AiCredentialResolutionTest {
   @Mock
   private ApplicationEventPublisher eventPublisher;
 
+  @Mock
+  private UserCapabilityRepository capabilityRepository;
+
   private UserCredentialService service;
   private final Map<String, UserLlmCredentialEntity> store = new HashMap<>();
 
@@ -74,7 +79,7 @@ class AiCredentialResolutionTest {
     llm.setProviders(providers);
 
     service = new UserCredentialService(repository, encryptionService,
-        new ProviderPresetRegistry(byok, llm), byok, llm, currentUserProvider, eventPublisher);
+        new ProviderPresetRegistry(byok, llm), byok, capabilityRepository, currentUserProvider, eventPublisher);
 
     // 简单的内存仓储行为
     org.mockito.Mockito.lenient().when(repository.findByUserIdAndProviderKey(any(), any()))
@@ -89,12 +94,20 @@ class AiCredentialResolutionTest {
       if (e.getUpdatedAt() == null) {
         e.setUpdatedAt(LocalDateTime.now());
       }
+      if (e.getId() == null) {
+        e.setId((long) store.size() + 1);
+      }
       store.put(e.getProviderKey(), e);
       return e;
     });
     org.mockito.Mockito.lenient().when(encryptionService.encrypt(any()))
         .thenAnswer(inv -> new ApiKeyEncryptionService.EncryptedValue("cipher", "nonce"));
     org.mockito.Mockito.lenient().when(encryptionService.decrypt(any(), any())).thenReturn("sk-plaintext-key");
+  }
+
+  private UserCapabilityRepository.Selection selection(String key) {
+    var entity = store.get(key);
+    return new UserCapabilityRepository.Selection(key, entity.getId(), entity.getModelName());
   }
 
   private LlmProviderProperties.ProviderConfig provider(String baseUrl, String model) {
@@ -114,10 +127,12 @@ class AiCredentialResolutionTest {
   }
 
   @Test
-  @DisplayName("DashScope 凭证可用于 Chat 并标记语音就绪")
+  @DisplayName("保存凭证后仍须明确选择文本模型")
   void dashscopeCoversChatAndSpeech() {
     service.save(USER_ID, new SaveCredentialRequest(DASHSCOPE, "sk-dashscope-0123456789", "qwen-plus"));
 
+    assertThatThrownBy(() -> service.chatContextForUser(USER_ID, null)).isInstanceOf(BusinessException.class);
+    when(capabilityRepository.find(USER_ID, AiCapability.TEXT)).thenReturn(Optional.of(selection(DASHSCOPE)));
     AiExecutionContext chat = service.chatContextForUser(USER_ID, null);
 
     assertThat(chat.providerKey()).isEqualTo(DASHSCOPE);
@@ -173,6 +188,9 @@ class AiCredentialResolutionTest {
   @DisplayName("状态接口分别暴露 Chat / 语音就绪状态")
   void statusReportsEachCapability() {
     service.save(USER_ID, new SaveCredentialRequest(DASHSCOPE, "sk-dashscope-0123456789", "qwen-plus"));
+    service.save(USER_ID, new SaveCredentialRequest("volcengine-asr", "test-voice-0123456", "volc.seedasr.sauc.duration"));
+    when(capabilityRepository.find(USER_ID, AiCapability.TEXT)).thenReturn(Optional.of(selection(DASHSCOPE)));
+    when(capabilityRepository.find(USER_ID, AiCapability.ASR)).thenReturn(Optional.of(selection("volcengine-asr")));
     CredentialStatusDTO status = service.status(USER_ID);
 
     assertThat(status.chatReady()).isTrue();
@@ -181,15 +199,25 @@ class AiCredentialResolutionTest {
   }
 
   @Test
-  @DisplayName("偏好供应商仅在用户确实配置时采纳，否则回退到用户自己的其他凭证")
-  void preferredProviderOnlyWhenConfigured() {
+  @DisplayName("模型绑定按能力隔离，已失效的任务凭证不会自动回退")
+  void capabilitySelectionDoesNotFallBack() {
     service.save(USER_ID, new SaveCredentialRequest(DEEPSEEK, "sk-deepseek-0123456789", "deepseek-chat"));
+    service.save(USER_ID, new SaveCredentialRequest("volcengine-asr", "test-voice-0123456", "volc.seedasr.sauc.duration"));
 
-    AiExecutionContext ctx = service.chatContextForUser(USER_ID, "glm");
-    assertThat(ctx.providerKey()).isEqualTo(DEEPSEEK);
+    assertThatThrownBy(() -> service.selectCapability(USER_ID, AiCapability.ASR, DEEPSEEK))
+        .isInstanceOf(BusinessException.class);
+    service.selectCapability(USER_ID, AiCapability.TEXT, DEEPSEEK);
+    service.selectCapability(USER_ID, AiCapability.ASR, "volcengine-asr");
+    verify(capabilityRepository).save(USER_ID, AiCapability.TEXT, selection(DEEPSEEK));
+    verify(capabilityRepository).save(USER_ID, AiCapability.ASR, selection("volcengine-asr"));
 
-    AiExecutionContext preferred = service.chatContextForUser(USER_ID, DEEPSEEK);
-    assertThat(preferred.providerKey()).isEqualTo(DEEPSEEK);
+    when(capabilityRepository.find(USER_ID, AiCapability.TEXT)).thenReturn(Optional.of(selection(DEEPSEEK)));
+    String reference = service.requireSelectedReference(USER_ID, AiCapability.TEXT);
+    assertThat(service.chatContextForUser(USER_ID, reference).providerKey()).isEqualTo(DEEPSEEK);
+    service.save(USER_ID, new SaveCredentialRequest(DEEPSEEK, "sk-deepseek-9876543210", "deepseek-chat"));
+    assertThatThrownBy(() -> service.chatContextForUser(USER_ID, reference))
+        .isInstanceOf(BusinessException.class).hasMessageContaining("配置已变更");
+    assertThat(service.selectedReference(USER_ID, AiCapability.TTS)).isEmpty();
   }
 
   @Test

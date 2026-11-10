@@ -7,6 +7,8 @@ import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
 import interview.guide.modules.interview.skill.InterviewSkillService;
+import interview.guide.modules.usercredential.model.AiCapability;
+import interview.guide.modules.usercredential.service.UserCredentialService;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
 import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
@@ -59,6 +61,7 @@ public class VoiceInterviewService {
     private final LlmProviderRegistry llmProviderRegistry;
     private final CurrentUserProvider currentUserProvider;
     private final InterviewSkillService skillService;
+    private final UserCredentialService userCredentialService;
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
     private static final int CACHE_TTL_HOURS = 1;
@@ -78,9 +81,10 @@ public class VoiceInterviewService {
         if (!InterviewSkillService.CUSTOM_SKILL_ID.equals(effectiveSkillId)) {
             skillService.getSkill(effectiveSkillId);
         }
-        String effectiveLlmProvider = (request.getLlmProvider() != null && !request.getLlmProvider().isBlank())
-            ? request.getLlmProvider()
-            : null;
+        Long userId = currentUserProvider.requireUserId();
+        String effectiveLlmProvider = userCredentialService.requireSelectedReference(userId, AiCapability.TEXT);
+        String asrReference = userCredentialService.requireSelectedReference(userId, AiCapability.ASR);
+        String ttsReference = userCredentialService.selectedReference(userId, AiCapability.TTS).orElse(null);
 
         // 请求体缺省字段可能为 null（@Builder.Default 在反序列化时不一定生效），按文档默认值补齐
         boolean introEnabled = request.getIntroEnabled() != null ? request.getIntroEnabled() : false;
@@ -91,7 +95,7 @@ public class VoiceInterviewService {
 
         VoiceInterviewSessionEntity session = VoiceInterviewSessionEntity.builder()
                 // 归属用户只能来自认证上下文，前端无法指定
-                .userId(currentUserProvider.requireUserId())
+                .userId(userId)
                 .roleType(effectiveSkillId)
                 .skillId(effectiveSkillId)
                 .difficulty(request.getDifficulty() != null ? request.getDifficulty() : InterviewDefaults.DIFFICULTY)
@@ -102,6 +106,8 @@ public class VoiceInterviewService {
                 .projectEnabled(projectEnabled)
                 .hrEnabled(hrEnabled)
                 .llmProvider(effectiveLlmProvider)
+                .asrReference(asrReference)
+                .ttsReference(ttsReference)
                 .plannedDuration(plannedDuration)
                 .currentPhase(determineFirstPhase(introEnabled, techEnabled, projectEnabled, hrEnabled))
                 .build();

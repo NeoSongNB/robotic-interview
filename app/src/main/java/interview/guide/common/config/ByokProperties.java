@@ -22,7 +22,7 @@ public class ByokProperties {
      * 其 Base URL 由服务端从 {@code app.ai.providers.<key>.base-url} 读取，
      * 前端无法指定，避免 SSRF。</p>
      */
-    private List<String> allowedProviders = List.of("dashscope", "kimi", "deepseek", "glm");
+    private List<String> allowedProviders = List.of("dashscope", "kimi", "deepseek", "glm", "volcengine");
 
     /** 用户 API Key 允许的最大长度，超出直接拒绝，避免超长内容撑爆存储。 */
     private int maxApiKeyLength = 512;

@@ -43,16 +43,16 @@ class CredentialConnectionTestServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new CredentialConnectionTestService(llmProviderRegistry, userCredentialService);
+    service = new CredentialConnectionTestService(llmProviderRegistry, userCredentialService, null, null, null);
   }
 
   @Test
   @DisplayName("测试成功时返回真实延迟与模型信息，且不包含 API Key")
   void successResultHasNoSecret() {
-    when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
+    when(userCredentialService.openSavedSecretForTest(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
     ChatClient client = mockChatClientReturning("OK");
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenReturn(client);
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -67,9 +67,9 @@ class CredentialConnectionTestServiceTest {
   @Test
   @DisplayName("供应商认证失败时返回明确错误码，且错误信息已脱敏")
   void authFailureIsClassifiedAndRedacted() {
-    when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
+    when(userCredentialService.openSavedSecretForTest(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenThrow(new IllegalStateException("401 Unauthorized: invalid api key " + API_KEY));
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -84,9 +84,9 @@ class CredentialConnectionTestServiceTest {
   @Test
   @DisplayName("通用错误信息中的疑似密钥片段会被脱敏")
   void genericErrorIsRedacted() {
-    when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
+    when(userCredentialService.openSavedSecretForTest(USER_ID, PROVIDER))
         .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 1L));
-    when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+    when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
         .thenThrow(new IllegalStateException("connect failed with token sk-abcdefghijklmnop"));
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -99,7 +99,7 @@ class CredentialConnectionTestServiceTest {
   @Test
   @DisplayName("未配置凭证时返回配置错误，不会使用平台全局 Key")
   void notConfiguredFailsFast() {
-    when(userCredentialService.openChatSecret(USER_ID, PROVIDER))
+    when(userCredentialService.openSavedSecretForTest(USER_ID, PROVIDER))
         .thenThrow(new BusinessException(ErrorCode.USER_CREDENTIAL_NOT_CONFIGURED));
 
     CredentialTestResultDTO result = service.testSaved(USER_ID, PROVIDER);
@@ -119,7 +119,7 @@ class CredentialConnectionTestServiceTest {
       when(userCredentialService.openTransientSecret(eq(PROVIDER), eq(API_KEY)))
           .thenReturn(new ProviderSecret(PROVIDER, "https://api.deepseek.com", MODEL, API_KEY, 0L));
       ChatClient client = mockChatClientReturning("OK");
-      when(llmProviderRegistry.buildEphemeralChatClient(anyString(), anyString(), anyString()))
+      when(llmProviderRegistry.buildEphemeralChatClient(eq(PROVIDER), anyString(), anyString(), anyString()))
           .thenReturn(client);
 
       CredentialTestResultDTO result = service.testTransient(USER_ID,

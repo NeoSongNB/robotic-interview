@@ -176,7 +176,7 @@ public class AnalyzeStreamConsumer extends AbstractStreamConsumer<AnalyzeStreamC
         // 异步任务没有 SecurityContext：userId 取自简历的实际所有者，禁止回退平台 Key
         AiExecutionContext chatContext =
             userCredentialService.chatContextForUser(
-            AsyncOwnerGuard.requireOwner(resume.getUserId(), "resume", resume.getId()), null);
+            AsyncOwnerGuard.requireOwner(resume.getUserId(), "resume", resume.getId()), resume.getTextModelReference());
         ResumeAnalysisResponse analysis = gradingService.analyzeResume(chatContext, resumeText);
         // LLM 分析完成心跳（单次外部调用，无循环；分析超时必须小于 PROCESSING 阈值）
         heartbeat(payload);

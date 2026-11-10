@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ChevronRight,
+  Volume2,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -16,7 +18,8 @@ import {
 import { userCredentialApi } from '../api/userCredential';
 import { getErrorMessage } from '../api/request';
 import type {
-  CredentialStatus,
+  AiCapability,
+  CapabilitySelection,
   CredentialTestResult,
   ProviderPreset,
   UserCredential,
@@ -40,7 +43,10 @@ import ConfirmDialog from './ConfirmDialog';
 export default function MyAiSettings() {
   const [presets, setPresets] = useState<ProviderPreset[]>([]);
   const [credentials, setCredentials] = useState<UserCredential[]>([]);
-  const [status, setStatus] = useState<CredentialStatus | null>(null);
+  const [capabilities, setCapabilities] = useState<CapabilitySelection[]>([]);
+  const [openedCapability, setOpenedCapability] = useState<AiCapability | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [capabilityError, setCapabilityError] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -65,21 +71,26 @@ export default function MyAiSettings() {
     () => credentials.find(item => item.providerKey === providerKey) ?? null,
     [credentials, providerKey],
   );
+  const [reuseSource, setReuseSource] = useState('');
+  const reusable = credentials.filter(item => item.configured && item.providerKey !== providerKey &&
+    ((providerKey.startsWith('dashscope-') &&
+      (item.providerKey === 'dashscope' || item.providerKey.startsWith('dashscope-'))) ||
+    (providerKey.startsWith('volcengine-') && item.providerKey.startsWith('volcengine-'))));
   const currentPreset = useMemo(
     () => presets.find(item => item.providerKey === providerKey) ?? null,
     [presets, providerKey],
   );
 
   const reload = useCallback(async () => {
-    const [presetList, credentialList, statusInfo] = await Promise.all([
+    const [presetList, credentialList, capabilityList] = await Promise.all([
       userCredentialApi.providers(),
       userCredentialApi.list(),
-      userCredentialApi.status(),
+      userCredentialApi.capabilities(),
     ]);
     setPresets(presetList);
     setCredentials(credentialList);
-    setStatus(statusInfo);
-    return { presetList, credentialList, statusInfo };
+    setCapabilities(capabilityList);
+    return { presetList, credentialList, capabilityList };
   }, []);
 
   useEffect(() => {
@@ -109,6 +120,7 @@ export default function MyAiSettings() {
 
   const handleProviderChange = (nextKey: string) => {
     setProviderKey(nextKey);
+    setReuseSource('');
     setFormError('');
     setNotice('');
     setTestResult(null);
@@ -174,7 +186,7 @@ export default function MyAiSettings() {
       setFormError('请选择供应商');
       return;
     }
-    if (!current?.configured && !trimmedKey) {
+    if (!current?.configured && !trimmedKey && !reuseSource) {
       setFormError('首次配置需要填写 API Key');
       return;
     }
@@ -185,7 +197,10 @@ export default function MyAiSettings() {
 
     setSaving(true);
     try {
-      if (current?.configured) {
+      if (reuseSource && !trimmedKey) {
+        await userCredentialApi.reuseKey(providerKey, reuseSource);
+        setReuseSource('');
+      } else if (current?.configured) {
         // 已配置：Key 留空表示只修改模型
         await userCredentialApi.update(providerKey, {
           apiKey: trimmedKey || undefined,
@@ -252,6 +267,80 @@ export default function MyAiSettings() {
     );
   }
 
+  const renderCapability = (item: CapabilitySelection) => {
+    const { capability, options, providerKey, ready } = item;
+    const label = { TEXT: '文本生成', ASR: '语音转写', TTS: '语音播报' }[capability];
+    const Icon = { TEXT: MessageSquare, ASR: Mic, TTS: Volume2 }[capability];
+    const open = openedCapability === capability;
+    const selected = ready ? options.find(option => option.providerKey === providerKey) : undefined;
+    const sorted = [...options].sort((a, b) => Number(b.providerKey === 'hunyuan') - Number(a.providerKey === 'hunyuan'));
+    const statusText = ready && selected ? selected.displayName + ' · ' + selected.modelName
+      : providerKey ? '所选模型不可用' : options.length ? '请选择模型' : '暂无可用' + label + '模型';
+    return (
+      <div key={capability} className="min-w-0 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+        <button type="button" aria-expanded={open} aria-label={'选择' + label + '模型'}
+          className="flex min-h-11 w-full items-center gap-2 rounded-lg px-1 text-left focus-visible:ring-2 focus-visible:ring-primary-500"
+          onClick={() => { setOpenedCapability(open ? null : capability); setCapabilityError(''); }}>
+          <Icon className="h-5 w-5 shrink-0 text-primary-500" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{label}</span>
+            <span className="block break-words text-xs text-slate-500 dark:text-slate-300">{statusText}</span>
+          </span>
+          <ChevronRight className={'h-5 w-5 shrink-0 text-primary-500 transition-transform ' + (open ? 'rotate-90' : '')} />
+        </button>
+        {open && (
+          <div className="mt-2 space-y-2">
+                              {sorted.length === 0 && (
+              <a href="#ai-provider-credentials" className="text-xs text-primary-500"
+                onClick={() => {
+                  const preset = presets.find(candidate => candidate.capability === capability);
+                  if (preset) handleProviderChange(preset.providerKey);
+                }}>
+                {capability === 'TEXT' ? '添加文本模型' : '配置兼容的' + label + '服务'}
+              </a>
+            )}
+            {(sorted.length > 0 || providerKey) && (
+              <select aria-label={label} value={selected?.providerKey ?? ''} disabled={selecting}
+                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                onChange={async event => {
+                  const key = event.target.value;
+                  setSelecting(true);
+                  setCapabilityError('');
+                  try {
+                    await userCredentialApi.selectCapability(capability, key || null);
+                    setCapabilities(await userCredentialApi.capabilities());
+                  } catch (error) {
+                    setCapabilityError(getErrorMessage(error));
+                  } finally {
+                    setSelecting(false);
+                  }
+                }}>
+                <option value="">未选择</option>
+                {sorted.map(option => <option key={option.providerKey} value={option.providerKey}>
+                  {option.displayName} · {option.modelName}
+                </option>)}
+              </select>
+            )}
+            {ready && providerKey && (
+              <button type="button" className="text-xs text-primary-500" disabled={!!testing}
+                onClick={() => handleTest(providerKey)}>测试{label}</button>
+            )}
+            {providerKey && !selected && <button type="button" className="text-xs text-primary-500"
+              onClick={async () => {
+                try {
+                  await userCredentialApi.selectCapability(capability, null);
+                  setCapabilities(await userCredentialApi.capabilities());
+                } catch (error) {
+                  setCapabilityError(getErrorMessage(error));
+                }
+              }}>清空失效选择</button>}
+            {capabilityError && <p role="alert" className="text-xs text-red-500">{capabilityError}</p>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <section className="mb-10">
       <div className="mb-4 flex items-center justify-between">
@@ -275,25 +364,19 @@ export default function MyAiSettings() {
         </div>
       )}
 
-      {/* 能力就绪状态：Chat / 语音 分开展示，未就绪时给出明确引导 */}
-      {status && (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <StatusCard
-            icon={<MessageSquare className="h-4 w-4" />}
-            title="对话模型"
-            ready={status.chatReady}
-            readyText={`${status.chatProviderKey ?? ''} · ${status.chatModelName ?? ''}`}
-            pendingText="未配置，简历分析 / 面试出题 / 评分均不可用"
-          />
-          <StatusCard
-            icon={<Mic className="h-4 w-4" />}
-            title="语音（ASR / TTS）"
-            ready={status.speechReady}
-            readyText={`${status.speechProviderKey ?? ''} · 语音面试可用`}
-            pendingText="未配置 DashScope Key，语音面试不可用"
-          />
+      <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_2fr]">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <h3 className="mb-2 text-sm font-semibold">文本模型</h3>
+          {capabilities.filter(item => item.capability === 'TEXT').map(renderCapability)}
         </div>
-      )}
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
+          <h3 className="text-sm font-semibold">语音面试配置</h3>
+          <p className="mb-2 text-xs text-slate-500 dark:text-slate-300">转写用于听取回答，播报用于读出题目。</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {capabilities.filter(item => item.capability !== 'TEXT').map(renderCapability)}
+          </div>
+        </div>
+      </div>
 
       {!loading && credentials.filter(item => item.configured).length === 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-900/20">
@@ -305,7 +388,7 @@ export default function MyAiSettings() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div id="ai-provider-credentials" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 配置表单 */}
         <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <h3 className="mb-4 text-sm font-semibold text-slate-800 dark:text-white">
@@ -323,23 +406,30 @@ export default function MyAiSettings() {
             className="mb-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/40 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           >
             {presets.length === 0 && <option value="">暂无可选供应商</option>}
-            {presets.map(preset => (
-              <option key={preset.providerKey} value={preset.providerKey}>
-                {preset.displayName}
-                {preset.configured ? '（已配置）' : ''}
-              </option>
-            ))}
+            {(['TEXT', 'ASR', 'TTS'] as const).map(capability => {
+              const options = presets.filter(preset => (preset.capability ?? 'TEXT') === capability);
+              if (options.length === 0) return null;
+              return (
+                <optgroup key={capability} label={{ TEXT: '文本生成', ASR: '语音转写', TTS: '语音播报' }[capability]}>
+                  {options.map(preset => (
+                    <option key={preset.providerKey} value={preset.providerKey}>
+                      {preset.displayName}{preset.configured ? '（已配置）' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
 
           <label htmlFor="my-ai-model" className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
-            聊天模型
+            模型
           </label>
           <input
             id="my-ai-model"
             type="text"
             value={modelName}
             onChange={(event) => setModelName(event.target.value)}
-            disabled={saving}
+            disabled={saving || (currentPreset?.capability !== undefined && currentPreset.capability !== 'TEXT')}
             placeholder={currentPreset?.defaultModel ?? '例如 qwen-plus'}
             className="mb-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/40 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
@@ -347,7 +437,20 @@ export default function MyAiSettings() {
             Base URL 由服务端白名单固定，不可修改
           </p>
 
-          <label htmlFor="my-ai-key" className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
+          {reusable.length > 0 && !apiKey && (
+            <label className="mb-3 block text-xs">
+              复用已配置的同厂商凭证
+              <select className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2 dark:border-slate-700 dark:bg-slate-900"
+                value={reuseSource} onChange={event => setReuseSource(event.target.value)}>
+                <option value="">单独填写 API Key</option>
+                {reusable.map(item => <option key={item.providerKey} value={item.providerKey}>
+                  {presets.find(preset => preset.providerKey === item.providerKey)?.displayName ?? item.providerKey}
+                </option>)}
+              </select>
+            </label>
+          )}
+
+          <label htmlFor="my-ai-key"  className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
             API Key
           </label>
           <div className="relative">
@@ -532,6 +635,16 @@ export default function MyAiSettings() {
         </div>
       </div>
 
+      <aside className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-700 dark:bg-slate-800">
+        <h3 className="mb-2 font-semibold">使用前请确认</h3>
+        <ul className="list-disc space-y-1.5 pl-5 text-slate-600 dark:text-slate-300">
+          <li>文字面试和简历分析需要选择一个文本模型。</li>
+          <li>语音面试需要文本生成和语音转写，并允许浏览器使用麦克风。语音播报可选，未配置时可看文字题目。</li>
+          <li>聊天模型的 Key 不一定能调用语音服务。请使用已开通对应能力的凭证，保存后在上方选择。</li>
+          <li>图片和扫描 PDF 简历由站内识别文字，无需额外配置图片识别模型。</li>
+        </ul>
+      </aside>
+
       <ConfirmDialog
         open={pendingDelete !== null}
         title="删除 AI 配置"
@@ -544,49 +657,5 @@ export default function MyAiSettings() {
         onCancel={() => setPendingDelete(null)}
       />
     </section>
-  );
-}
-
-/** 单项 AI 能力就绪状态卡片 */
-function StatusCard({
-  icon,
-  title,
-  ready,
-  readyText,
-  pendingText,
-}: {
-  icon: ReactNode;
-  title: string;
-  ready: boolean;
-  readyText: string;
-  pendingText: string;
-}) {
-  return (
-    <div
-      className={`rounded-xl border p-3 ${
-        ready
-          ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-900/40 dark:bg-emerald-900/15'
-          : 'border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/30'
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <span className={ready ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}>
-          {icon}
-        </span>
-        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</span>
-        <span
-          className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-            ready
-              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-              : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-          }`}
-        >
-          {ready ? '已就绪' : '未配置'}
-        </span>
-      </div>
-      <p className="mt-2 break-words text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-        {ready ? readyText : pendingText}
-      </p>
-    </div>
   );
 }

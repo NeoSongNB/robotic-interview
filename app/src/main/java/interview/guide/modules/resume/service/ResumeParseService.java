@@ -3,6 +3,9 @@ package interview.guide.modules.resume.service;
 import interview.guide.infrastructure.file.ContentTypeDetectionService;
 import interview.guide.infrastructure.file.DocumentParseService;
 import interview.guide.infrastructure.file.FileStorageService;
+import interview.guide.infrastructure.file.ResumeOcrService;
+import interview.guide.common.exception.BusinessException;
+import interview.guide.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +23,7 @@ public class ResumeParseService {
     private final DocumentParseService documentParseService;
     private final ContentTypeDetectionService contentTypeDetectionService;
     private final FileStorageService storageService;
+    private final ResumeOcrService ocrService;
 
     /**
      * 解析上传的简历文件，提取文本内容
@@ -41,7 +45,15 @@ public class ResumeParseService {
      */
     public String parseResume(byte[] fileBytes, String fileName) {
         log.info("开始解析简历文件（从字节数组）: {}", fileName);
-        return documentParseService.parseContent(fileBytes, fileName);
+        if (fileBytes == null || fileBytes.length == 0) {
+            return "";
+        }
+        String mime = contentTypeDetectionService.detectContentType(fileBytes, fileName);
+        if (ResumeOcrService.isImage(mime)) {
+            return ocrService.recognize(fileBytes, mime);
+        }
+        String text = documentParseService.parseContent(fileBytes, fileName);
+        return "application/pdf".equals(mime) && text.isBlank() ? ocrService.recognize(fileBytes, mime) : text;
     }
 
     /**
@@ -53,7 +65,11 @@ public class ResumeParseService {
      */
     public String downloadAndParseContent(String storageKey, String originalFilename) {
         log.info("从存储下载并解析简历文件: {}", originalFilename);
-        return documentParseService.downloadAndParseContent(storageService, storageKey, originalFilename);
+        byte[] bytes = storageService.downloadFile(storageKey);
+        if (bytes == null || bytes.length == 0) {
+            throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "无法读取原始简历文件");
+        }
+        return parseResume(bytes, originalFilename);
     }
 
     /**
