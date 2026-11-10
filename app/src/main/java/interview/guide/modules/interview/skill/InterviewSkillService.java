@@ -142,6 +142,10 @@ public class InterviewSkillService {
             .toList();
     }
 
+    public boolean hasPresetSkill(String skillId) {
+        return skillId != null && presetRegistry.containsKey(skillId);
+    }
+
     public SkillDTO getSkill(String skillId) {
         InterviewSkillProperties.SkillDefinition preset = presetRegistry.get(skillId);
         if (preset != null) {

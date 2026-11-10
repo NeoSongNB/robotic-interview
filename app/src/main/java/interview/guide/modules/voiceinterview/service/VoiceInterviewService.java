@@ -6,6 +6,7 @@ import interview.guide.common.constant.CommonConstants.InterviewDefaults;
 import interview.guide.common.exception.BusinessException;
 import interview.guide.common.exception.ErrorCode;
 import interview.guide.common.model.AsyncTaskStatus;
+import interview.guide.modules.interview.skill.InterviewSkillService;
 import interview.guide.modules.voiceinterview.config.VoiceInterviewProperties;
 import interview.guide.modules.voiceinterview.dto.CreateSessionRequest;
 import interview.guide.modules.voiceinterview.dto.VoiceInterviewMessageDTO;
@@ -57,6 +58,7 @@ public class VoiceInterviewService {
     private final VoiceEvaluateStreamProducer voiceEvaluateStreamProducer;
     private final LlmProviderRegistry llmProviderRegistry;
     private final CurrentUserProvider currentUserProvider;
+    private final InterviewSkillService skillService;
 
     private static final String SESSION_CACHE_KEY_PREFIX = "voice:interview:session:";
     private static final int CACHE_TTL_HOURS = 1;
@@ -73,6 +75,9 @@ public class VoiceInterviewService {
     @Transactional
     public SessionResponseDTO createSession(CreateSessionRequest request) {
         String effectiveSkillId = request.getSkillId() != null ? request.getSkillId() : InterviewDefaults.SKILL_ID;
+        if (!InterviewSkillService.CUSTOM_SKILL_ID.equals(effectiveSkillId)) {
+            skillService.getSkill(effectiveSkillId);
+        }
         String effectiveLlmProvider = (request.getLlmProvider() != null && !request.getLlmProvider().isBlank())
             ? request.getLlmProvider()
             : null;

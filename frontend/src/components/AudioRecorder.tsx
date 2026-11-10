@@ -145,6 +145,12 @@ export default function AudioRecorder({
       }
 
       // Step 1: Get microphone stream
+      if (!window.isSecureContext) {
+        throw new Error('当前连接不支持麦克风。请通过 HTTPS 打开网站，或返回使用文字面试。');
+      }
+      if (typeof navigator.mediaDevices?.getUserMedia !== 'function') {
+        throw new Error('当前浏览器无法调用麦克风，请用新版 Chrome 或 Edge 打开。');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -267,7 +273,14 @@ export default function AudioRecorder({
         return;
       }
       console.error('Error accessing microphone:', error);
-      const message = error instanceof Error ? error.message : '无法访问麦克风，请检查权限设置';
+      const messages: Record<string, string> = {
+        NotAllowedError: '麦克风权限未开启。请在浏览器的站点设置中允许使用麦克风，然后重试。',
+        NotFoundError: '未找到麦克风。请连接或启用麦克风后重试。',
+        NotReadableError: '无法读取麦克风。请检查系统权限，或关闭占用麦克风的程序后重试。',
+      };
+      const message = error instanceof Error
+        ? messages[error.name] ?? error.message
+        : '无法访问麦克风，请检查权限设置。';
       alert(message);
     }
   };
